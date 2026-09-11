@@ -1,0 +1,15 @@
+import {readFileSync,writeFileSync,existsSync,mkdirSync,copyFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {randomBytes} from 'node:crypto';
+const cwd=process.cwd();const original=resolve(cwd,'dist/server/wrangler.json');
+if(!existsSync(original))throw new Error('Run pnpm build first.');
+const config=JSON.parse(readFileSync(original,'utf8'));
+config.main=resolve(cwd,'dist/server',config.main);config.assets.directory=resolve(cwd,'dist/server',config.assets.directory);
+config.d1_databases=config.d1_databases.map(d=>({...d,migrations_dir:resolve(cwd,'drizzle')}));
+mkdirSync('.sites-runtime',{recursive:true});writeFileSync('.sites-runtime/local-wrangler.json',JSON.stringify(config,null,2));
+if(!existsSync('.dev.vars'))writeFileSync('.dev.vars','PLASMA_SETUP_KEY="'+randomBytes(24).toString('hex')+'"\nPLASMA_STANDALONE="true"\n',{mode:0o600});
+copyFileSync('.dev.vars','dist/server/.dev.vars');copyFileSync('.dev.vars','.sites-runtime/.dev.vars');
+const result=spawnSync(process.execPath,['--import','./scripts/sites-env.mjs','./node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','DB','--local','--config','.sites-runtime/local-wrangler.json','--persist-to','.wrangler/state'],{cwd,stdio:'inherit',env:{...process.env,CI:'true'}});
+if(result.status!==0)process.exit(result.status||1);
+console.log('Local database ready. Your first-setup key is in .dev.vars. Run pnpm start.');
