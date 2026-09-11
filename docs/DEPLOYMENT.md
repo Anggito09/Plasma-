@@ -1,6 +1,6 @@
 # Deployment
 
-Plasma is a server-backed app; GitHub Pages cannot host its API or database. The provided runtime targets Cloudflare Workers and D1. A separate database/deployment is required for each independent cafe.
+Trefiko is a server-backed app; GitHub Pages cannot host its API or database. The provided runtime targets Cloudflare Workers and D1. A separate database/deployment is required for each independent cafe.
 
 ## Local development (Windows, macOS, or Linux)
 
@@ -24,11 +24,11 @@ Requires a Cloudflare account with Workers and D1 access. Run from a workstation
 
 ```sh
 pnpm exec wrangler login
-pnpm exec wrangler d1 create plasma
+pnpm exec wrangler d1 create trefiko
 pnpm build
 node scripts/configure-cloudflare.mjs YOUR_D1_DATABASE_ID
 pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.deploy.json
-pnpm exec wrangler secret put PLASMA_SETUP_KEY --config wrangler.deploy.json
+pnpm exec wrangler secret put TREFIKO_SETUP_KEY --config wrangler.deploy.json
 pnpm exec wrangler deploy --config wrangler.deploy.json
 ```
 
@@ -37,14 +37,14 @@ Use the real D1 ID returned by database creation. Set a long random setup key at
 Before an update, back up the database and apply only new migrations. Generated migration files and metadata are append-only after deployment. To export a backup:
 
 ```sh
-pnpm exec wrangler d1 export DB --remote --config wrangler.deploy.json --output plasma-backup.sql
+pnpm exec wrangler d1 export DB --remote --config wrangler.deploy.json --output trefiko-backup.sql
 ```
 
 The export contains customer names and operational records. Keep backups private and outside Git. Test restore in a separate database before using a backup for recovery.
 
 ## Private preview delivered with this project
 
-The private preview is controlled by its owner-only gateway, in addition to Plasma's own login. Open it as the owner and complete the initial setup. Do not assume cafe staff can open that owner-only URL with their own accounts. For a cafe rollout, deploy under the cafe's hosting account and use Plasma's staff/display accounts there.
+The private preview is controlled by its owner-only gateway, in addition to Trefiko's own login. Open it as the owner and complete the initial setup. Do not assume cafe staff can open that owner-only URL with their own accounts. For a cafe rollout, deploy under the cafe's hosting account and use Trefiko's staff/display accounts there.
 
 The preview's logical `DB` binding and project identity are recorded in `.openai/hosting.json`; real database resources and secrets are managed by its hosting platform. Keep this identity intact when editing the existing preview.
 

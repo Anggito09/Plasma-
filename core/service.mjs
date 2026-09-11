@@ -44,9 +44,9 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ configured: !!config });
             if (path === 'setup' && method === 'POST') {
                 if (config)
-                    fail(409, 'Plasma sudah dikonfigurasi. Silakan masuk.');
+                    fail(409, 'Trefiko sudah dikonfigurasi. Silakan masuk.');
                 if (!trustedSetup && (!setupKey || body.setupKey !== setupKey))
-                    fail(403, 'Kunci setup diperlukan. Gunakan PLASMA_SETUP_KEY dari pengelola server.');
+                    fail(403, 'Kunci setup diperlukan. Gunakan TREFIKO_SETUP_KEY dari pengelola server.');
                 const username = str(body.username, 40).toLowerCase();
                 if (!/^[a-z0-9._-]+$/.test(username))
                     fail(400, 'Username hanya huruf, angka, titik, garis bawah, atau tanda hubung.');
@@ -68,7 +68,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ ok: true }, 201);
             }
             if (!config)
-                fail(503, 'Selesaikan pengaturan awal Plasma.');
+                fail(503, 'Selesaikan pengaturan awal Trefiko.');
             if (path === 'login' && method === 'POST') {
                 const username = str(body.username, 40).toLowerCase(), password = str(body.password, 128);
                 const ip = request.headers.get('cf-connecting-ip') || 'local';
@@ -77,14 +77,14 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 if (attempt.count > 8)
                     fail(429, 'Terlalu banyak percobaan. Coba lagi setelah 15 menit.');
                 const u = await q('SELECT * FROM users WHERE username=? AND active=1', username).first();
-                const match = await checkPassword(password, u?.password || 'plasma-dummy:0000000000000000000000000000000000000000000000000000000000000000');
+                const match = await checkPassword(password, u?.password || 'trefiko-dummy:0000000000000000000000000000000000000000000000000000000000000000');
                 if (!u || !match)
                     fail(401, 'Username atau kata sandi salah.');
                 const token = crypto.randomUUID() + crypto.randomUUID();
                 await db.batch([q('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', await digest(token), u.id, now + 43200000), q('DELETE FROM attempts WHERE key=? OR until<?', key, now), q('DELETE FROM sessions WHERE expires<?', now)]);
-                return json({ user: publicUser(u) }, 200, { 'Set-Cookie': `plasma_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${url.protocol === 'https:' ? '; Secure' : ''}` });
+                return json({ user: publicUser(u) }, 200, { 'Set-Cookie': `trefiko_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${url.protocol === 'https:' ? '; Secure' : ''}` });
             }
-            const token = request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith('plasma_session='))?.slice(15);
+            const token = request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith('trefiko_session='))?.slice('trefiko_session='.length);
             const user = token ? await q('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1', await digest(token), now).first() : null;
             if (!user)
                 fail(401, 'Silakan masuk untuk melanjutkan.');
@@ -95,7 +95,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ user: publicUser(user), config, day, serverTime: now });
             if (path === 'logout' && method === 'POST') {
                 await q('DELETE FROM sessions WHERE token=?', await digest(token)).run();
-                return json({ ok: true }, 200, { 'Set-Cookie': 'plasma_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+                return json({ ok: true }, 200, { 'Set-Cookie': 'trefiko_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
             }
             if (path === 'products' && method === 'GET') {
                 allow('admin', 'cashier');
@@ -246,12 +246,37 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 allow('admin');
                 return json({ entries: (await q('SELECT a.*,u.name FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.id DESC LIMIT 100').all()).results });
             }
+            if (path === 'finance' && method === 'GET') {
+                allow('admin');
+                const from = url.searchParams.get('from') || day, to = url.searchParams.get('to') || day;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+                    fail(400, 'Rentang tanggal tidak valid.');
+                const sales = await q("SELECT day,COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY day ORDER BY day", from, to).all();
+                const spent = await q('SELECT day,category,COUNT(*) AS count,COALESCE(SUM(amount),0) AS total FROM expenses WHERE day>=? AND day<=? GROUP BY day,category ORDER BY day', from, to).all();
+                const expenses = await q('SELECT e.*,u.name AS author FROM expenses e LEFT JOIN users u ON u.id=e.created_by WHERE e.day>=? AND e.day<=? ORDER BY e.day DESC,e.created_at DESC LIMIT 200', from, to).all();
+                return json({ from, to, sales: sales.results, spent: spent.results, expenses: expenses.results });
+            }
+            if (path === 'expenses' && method === 'POST') {
+                allow('admin');
+                const id = body.id ? uuid(body.id) : crypto.randomUUID();
+                const category = oneOf(body.category, ['bahan', 'operasional', 'gaji', 'lainnya']);
+                const note = str(body.note || '', 120, 0), amount = int(body.amount, 1, 2000000000);
+                const expenseDay = typeof body.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.day) ? body.day : day;
+                await db.batch([q('INSERT INTO expenses(id,day,category,note,amount,created_at,created_by) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET day=excluded.day,category=excluded.category,note=excluded.note,amount=excluded.amount', id, expenseDay, category, note || category, amount, now, user.id), audit(user, 'expense.save', id, now)]);
+                return json({ ok: true, id });
+            }
+            if (path === 'expenses/delete' && method === 'POST') {
+                allow('admin');
+                const id = uuid(body.id);
+                await db.batch([q('DELETE FROM expenses WHERE id=?', id), audit(user, 'expense.delete', id, now)]);
+                return json({ ok: true });
+            }
             fail(404, 'Halaman API tidak ditemukan.');
         }
         catch (e) {
             if (e instanceof HttpError)
                 return json({ error: e.message }, e.status);
-            console.error('Plasma API failure', e);
+            console.error('Trefiko API failure', e);
             return json({ error: 'Layanan sementara tidak tersedia. Data isian tetap disimpan di layar; silakan coba lagi.' }, 503);
         }
     };

@@ -8,7 +8,7 @@ const config=JSON.parse(readFileSync(original,'utf8'));
 config.main=resolve(cwd,'dist/server',config.main);config.assets.directory=resolve(cwd,'dist/server',config.assets.directory);
 config.d1_databases=config.d1_databases.map(d=>({...d,migrations_dir:resolve(cwd,'drizzle')}));
 mkdirSync('.sites-runtime',{recursive:true});writeFileSync('.sites-runtime/local-wrangler.json',JSON.stringify(config,null,2));
-if(!existsSync('.dev.vars'))writeFileSync('.dev.vars','PLASMA_SETUP_KEY="'+randomBytes(24).toString('hex')+'"\nPLASMA_STANDALONE="true"\n',{mode:0o600});
+if(!existsSync('.dev.vars'))writeFileSync('.dev.vars','TREFIKO_SETUP_KEY="'+randomBytes(24).toString('hex')+'"\nTREFIKO_STANDALONE="true"\n',{mode:0o600});
 copyFileSync('.dev.vars','dist/server/.dev.vars');copyFileSync('.dev.vars','.sites-runtime/.dev.vars');
 const result=spawnSync(process.execPath,['--import','./scripts/sites-env.mjs','./node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','DB','--local','--config','.sites-runtime/local-wrangler.json','--persist-to','.wrangler/state'],{cwd,stdio:'inherit',env:{...process.env,CI:'true'}});
 if(result.status!==0)process.exit(result.status||1);

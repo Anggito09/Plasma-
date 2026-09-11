@@ -2,14 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Plasma — Antrean Kafe",
-  description: "Kasir, dapur, dan TV antrean kafe dalam satu sistem.",
-  other: {
-    "codex-preview": "development",
-  },
+  title: "Trefiko — Kasir & Antrean Kafe",
+  description: "Kasir, dapur, TV antrean, dan keuangan Trefiko.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/logo-trefiko.svg",
+    shortcut: "/logo-trefiko.svg",
   },
 };
 
@@ -20,6 +17,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

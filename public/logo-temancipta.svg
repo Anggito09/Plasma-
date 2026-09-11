@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80">
+  <rect width="320" height="80" rx="16" fill="#FFFFFF"/>
+  <rect x="10" y="10" width="60" height="60" rx="14" fill="#2B1D12"/>
+  <text x="40" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="#E9A25B">T</text>
+  <text x="84" y="36" font-family="Arial, sans-serif" font-weight="800" font-size="20" fill="#2B1D12">TEMANCIPTA</text>
+  <text x="84" y="56" font-family="Arial, sans-serif" font-weight="600" font-size="13" fill="#9A4A1E" letter-spacing="2">PT • JASA KAFE</text>
+</svg>

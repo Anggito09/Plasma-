@@ -1,2 +1,2 @@
-import Plasma from '../plasma';
-export default function Page(){return <Plasma view="riwayat"/>}
+import Trefiko from '../trefiko';
+export default function Page(){return <Trefiko view="riwayat"/>}

@@ -1,6 +1,11 @@
-# Plasma
+# Trefiko
 
-Cafe ordering and queue management with cashier, kitchen, receipt printing, and a voice-enabled TV display.
+Kasir, antrean dapur, TV display bersuara, dan keuangan untuk kafe. Brand kafe: **Trefiko**. Logo perusahaan penyedia (`logo.png` → `public/logo-perusahaan.png`) tampil kecil di header, footer, dan login.
+
+- Nomor antrean harian reset tengah malam (WIB/WITA/WIT), tanpa batas 999.
+- Kasir 3 langkah, dapur ketuk kartu, TV panggil suara otomatis.
+- Keuangan khusus admin: catat pengeluaran (bahan, operasional, gaji, lainnya), grafik harian, laba = penjualan − pengeluaran.
+- Akun admin, kasir, dapur, dan TV dengan batas akses server.
 
 - Daily queue numbers reset at midnight in the cafe's Indonesian timezone, with no 999-order ceiling.
 - Concurrent-safe numbering, idempotent order creation, and optimistic status updates.
@@ -31,6 +36,7 @@ Open the URL printed by the server. For first setup, use the key generated in `.
 | Kitchen | `/dapur` |
 | TV display | `/display` |
 | Order history | `/riwayat` |
+| Finance (admin) | `/keuangan` |
 | Administration | `/pengaturan` |
 
 ```sh
