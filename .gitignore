@@ -48,6 +48,8 @@ next-env.d.ts
 .dev.vars*
 !.env.example
 /wrangler.deploy.json
+/wrangler.*.json
+/clients.local.json
 /*-backup.sql
 
 *.tsbuildinfo

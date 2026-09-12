@@ -14,7 +14,11 @@
     "db:generate": "drizzle-kit generate",
     "test": "node --test tests/service.test.mjs",
     "typecheck": "tsc --noEmit",
-    "local:prepare": "node scripts/local-prepare.mjs"
+    "local:prepare": "node scripts/local-prepare.mjs",
+    "client:new": "node scripts/provision-client.mjs",
+    "clients:migrate": "node scripts/clients-all.mjs migrate",
+    "clients:deploy": "node scripts/clients-all.mjs deploy",
+    "clients:all": "node scripts/clients-all.mjs all"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
