@@ -2,6 +2,18 @@
 
 Model: tiap kafe punya D1 + Worker sendiri. Skema (`drizzle/*.sql`) identik di semua client. Data tidak pernah tercampur karena database fisik terpisah.
 
+## Demo Temancipta vs produksi client
+
+- Deploy `app` (https://app.trefiko.workers.dev) = **demo & contoh milik Temancipta**. Halaman login otomatis tampil mode demo bila hostname mengandung `demo`, `temancipta`, atau `contoh`.
+- Client baru = worker + database sendiri via `pnpm client:new`. Jangan daftarkan kafe asli di demo.
+- Domain usaha milik client: daftarkan domainnya ke akun Cloudflare (Websites → Add), lalu:
+
+```sh
+pnpm client:domain trefiko-kopi-sudirman kasir.kopisudirman.id
+```
+
+Lalu di dashboard Workers → worker → Domains & Routes → Add custom domain. SSL gratis otomatis.
+
 ## Client baru (1 perintah)
 
 ```sh
@@ -30,8 +42,8 @@ pnpm clients:deploy     # hanya deploy
 
 ## Batas paket (koreksi)
 
-- Free: 10 database, tapi request 100 rb/hari per akun habis oleh ~1 kafe (kasir/dapur poll 3 dtk + TV 1,5 dtk ≈ 65–115 rb/hari). Realistis: free hanya untuk 1 kafe demo, client ke-2 butuh Paid.
+- Free: 10 database, tapi request 100 rb/hari per akun habis oleh ~1 kafe (kasir/dapur poll 3 dtk + TV 5 dtk ≈ 45–75 rb/hari). Realistis: free hanya untuk 1 kafe demo, client ke-2 butuh Paid.
 - Paid ($5/bln): 50.000 DB (bisa minta naik sampai jutaan), 10 jt request/bln included +$0,30/jt, rows read 25 M/bln included. Static asset gratis, hanya API polling yang dihitung.
 - Estimasi 100 kafe ≈ 240 jt req/bln → ±$75/bln total (≈$0,75/kafe).
-- Hemat: longgarkan TV ke 5–10 dtk, cursor delta sudah ada, pertimbangkan read replication. Bisa pangkas ~50%.
+- Hemat: TV sudah 5 dtk (cursor delta), kasir/dapur 3 dtk. Berikutnya: read replication bila tembus 25 M rows read/bln.
 - Pantau di dashboard: Workers & Pages → D1 → Metrics.

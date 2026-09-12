@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kasir & Antrean Kafe",
-  description: "Kasir, dapur, TV antrean, dan keuangan untuk kafe & UMKM.",
+  title: "Temancipta — Kasir & Antrean Kafe",
+  description: "Kasir, dapur, TV antrean, dan keuangan oleh Temancipta untuk kafe & UMKM.",
   icons: {
-    icon: "/logo-perusahaan.png",
-    shortcut: "/logo-perusahaan.png",
+    icon: "/logo-temancipta.svg",
+    shortcut: "/logo-temancipta.svg",
   },
 };
 

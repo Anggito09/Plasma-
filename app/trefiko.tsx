@@ -50,7 +50,7 @@ function Status({ status }: { status: string }) { return <span className={'statu
 function Brand({ name, sub }: { name: string; sub?: string }) {
   return (
     <a className="brand" href="/">
-      <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo" title="Disediakan oleh perusahaan penyedia layanan" />
+      <img src="/logo-temancipta.svg" alt="Temancipta" className="brand-logo-wide" title="Oleh Temancipta" />
       <span className="brand-text">{name}{sub && <small>{sub}</small>}</span>
     </a>
   );
@@ -175,7 +175,7 @@ export default function Trefiko({ view = 'kasir' }: { view?: string }) {
           if (path === 'products') await loadProducts();
           message('Tersimpan.'); return d;
         }} onLogout={logout} />}
-        <footer className="app-foot"><img src="/logo-perusahaan.png" alt="Penyedia layanan" /><span>Layanan kasir & TV antrean untuk kafe & UMKM</span></footer>
+        <footer className="app-foot"><img src="/logo-temancipta.svg" alt="Temancipta" className="foot-logo" /><span>Oleh Temancipta · untuk kafe & UMKM</span></footer>
       </div>
       <Dialog open={!!receipt} onOpenChange={open => { if (!open) setReceipt(null); }}>
         <DialogContent className="receipt-dialog no-print">
@@ -193,19 +193,20 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
   const [busy, setBusy] = useState(false);
   const [tz, setTz] = useState('Asia/Jakarta');
   const [sample, setSample] = useState(true);
+  const demo = typeof window !== 'undefined' && /(^|\.)demo\.|temancipta|contoh/i.test(window.location.hostname);
   return (
     <main className="auth">
       <section className="auth-brand">
         <div className="brand">
-          <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo large" />
+          <img src="/logo-temancipta.svg" alt="Temancipta" className="brand-logo-wide" />
         </div>
         <div className="auth-hero">
           <p className="eyebrow light">KASIR • DAPUR • TV ANTREAN • KEUANGAN</p>
-          <h1>Kasir & antrean<br />untuk kafe Anda.</h1>
+          <h1>{demo ? <>Demo Temancipta.<br />Coba kasir & TV antrean.</> : <>Kasir & antrean<br />untuk kafe Anda.</>}</h1>
           <div className="auth-steps">
-            <span><b>1</b>Kami daftarkan usaha Anda</span>
-            <span><b>2</b>Petugas tinggal login</span>
-            <span><b>3</b>Jualan langsung jalan</span>
+            <span><b>1</b>{demo ? 'Masuk pakai akun demo' : 'Kami daftarkan usaha Anda'}</span>
+            <span><b>2</b>{demo ? 'Buat pesanan contoh' : 'Petugas tinggal login'}</span>
+            <span><b>3</b>{demo ? 'Lihat TV antrean' : 'Jualan langsung jalan'}</span>
           </div>
         </div>
       </section>
@@ -407,7 +408,7 @@ function Pager({ page, pages, onChange }: { page: number; pages: number; onChang
 function Receipt({ order: o, config }: { order: Order; config: Config }) {
   return (
     <article className="receipt">
-      <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="receipt-logo" />
+      <img src="/logo-temancipta.svg" alt="Temancipta" className="receipt-logo wide" />
       <h2>{config.name}</h2>
       <p>{o.day} · {time(o.created_at, config.timezone)}</p>
       <div className="receipt-number"><span>ANTREAN</span><strong>{queueNumber(o.number)}</strong><h3>{o.customer}</h3><p>{o.mode === 'takeaway' ? 'BAWA PULANG' : 'DI SINI'}</p></div>
@@ -578,7 +579,7 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
         }
         drain();
       } catch { setEventConnected(false); }
-      if (alive) t = setTimeout(poll, 1500);
+      if (alive) t = setTimeout(poll, 5000);
     };
     poll();
     return () => { alive = false; clearTimeout(t); sound.current = false; queue.current = []; if (watchdog.current) clearTimeout(watchdog.current); if ('speechSynthesis' in window) speechSynthesis.cancel(); };
@@ -610,7 +611,7 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   return (
     <main className="display">
       <header className="display-header">
-        <div className="brand"><img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo" />{config.name}</div>
+        <div className="brand"><img src="/logo-temancipta.svg" alt="Temancipta" className="brand-logo-wide" />{config.name}</div>
         <div className="display-clock"><strong suppressHydrationWarning>{clock}</strong><span>{board?.day}</span></div>
       </header>
       {(!connected || !eventConnected) && <div className="display-warning" role="alert">Terputus — data mungkin belum terbaru.</div>}

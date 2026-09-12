@@ -44,6 +44,6 @@ Sessions expire after 12 hours. Sign in at the start of a shift. Disabling a sta
 
 ## Connection and retries
 
-The queue refreshes every 3 seconds; display call events refresh every 1.5 seconds. Saved data lives in the server database, not browser local storage. New orders cannot be submitted while the board is known to be disconnected.
+The queue refreshes every 3 seconds; display call events refresh every 5 seconds (hemat kuota request, panggilan tetap berurutan via cursor). Saved data lives in the server database, not browser local storage. New orders cannot be submitted while the board is known to be disconnected.
 
 If a save fails after an uncertain connection result, retry the same unchanged order. Trefiko reuses its request ID, so the server returns the previously saved order instead of allocating another number. Do not change the draft or reload until checking history for the original order. Browser drafts are not durable, and offline order entry is not supported.
