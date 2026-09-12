@@ -47,12 +47,11 @@ function Empty({ title, children }: { title: string; children?: React.ReactNode 
   return <div className="empty"><Ticket size={30} /><h3>{title}</h3><p>{children}</p></div>;
 }
 function Status({ status }: { status: string }) { return <span className={'status ' + status}>{statusNames[status]}</span>; }
-function Brand({ compact = false }: { compact?: boolean }) {
+function Brand({ name, sub }: { name: string; sub?: string }) {
   return (
     <a className="brand" href="/">
-      <img src="/logo-trefiko.svg" alt="Trefiko" className="brand-logo" />
-      <span className="brand-text">Trefiko{!compact && <small>KASIR KAFE</small>}</span>
       <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo" title="Disediakan oleh perusahaan penyedia layanan" />
+      <span className="brand-text">{name}{sub && <small>{sub}</small>}</span>
     </a>
   );
 }
@@ -137,7 +136,7 @@ export default function Trefiko({ view = 'kasir' }: { view?: string }) {
     <>
       <div className="app-shell no-print">
         <header className="topbar">
-          <Brand />
+          <Brand name={config.name} />
           <nav aria-label="Navigasi utama">
             {navigation.filter(([v]) => isAdmin || user.role === 'cashier' && v !== 'pengaturan' || user.role === 'kitchen' && v === 'dapur').map(([v, href, Icon, label]) => (
               <a key={v} href={href} className={actualView === v ? 'active' : ''}><Icon size={18} />{label}</a>
@@ -176,7 +175,7 @@ export default function Trefiko({ view = 'kasir' }: { view?: string }) {
           if (path === 'products') await loadProducts();
           message('Tersimpan.'); return d;
         }} onLogout={logout} />}
-        <footer className="app-foot"><span>Ditenagai Trefiko</span><img src="/logo-perusahaan.png" alt="Penyedia layanan" /><span>Layanan oleh perusahaan penyedia</span></footer>
+        <footer className="app-foot"><img src="/logo-perusahaan.png" alt="Penyedia layanan" /><span>Layanan kasir & TV antrean untuk kafe & UMKM</span></footer>
       </div>
       <Dialog open={!!receipt} onOpenChange={open => { if (!open) setReceipt(null); }}>
         <DialogContent className="receipt-dialog no-print">
@@ -197,14 +196,16 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
   return (
     <main className="auth">
       <section className="auth-brand">
-        <Brand />
+        <div className="brand">
+          <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo large" />
+        </div>
         <div className="auth-hero">
           <p className="eyebrow light">KASIR • DAPUR • TV ANTREAN • KEUANGAN</p>
-          <h1>Pesan cepat,<br />saji hangat.</h1>
+          <h1>Kasir & antrean<br />untuk kafe Anda.</h1>
           <div className="auth-steps">
-            <span><b>1</b>Kasir buat pesanan</span>
-            <span><b>2</b>Dapur proses</span>
-            <span><b>3</b>TV panggil</span>
+            <span><b>1</b>Kami daftarkan usaha Anda</span>
+            <span><b>2</b>Petugas tinggal login</span>
+            <span><b>3</b>Jualan langsung jalan</span>
           </div>
         </div>
       </section>
@@ -216,17 +217,17 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
             setBusy(true);
             try { await onSubmit({ ...v, timezone: tz, sampleMenu: sample }); } catch { } finally { setBusy(false); }
           }}>
-            <p className="eyebrow">TREFIKO</p>
-            <h2>{boot === 'setup' ? 'Siapkan kafe' : 'Masuk'}</h2>
-            <p className="muted">{boot === 'setup' ? 'Buat admin & identitas kafe sekali saja.' : 'Masuk sesuai peran petugas.'}</p>
+            <p className="eyebrow">MASUK PETUGAS</p>
+            <h2>{boot === 'setup' ? 'Daftarkan usaha' : 'Masuk'}</h2>
+            <p className="muted">{boot === 'setup' ? 'Hanya diisi sekali oleh penyedia layanan.' : 'Gunakan akun dari admin usaha Anda.'}</p>
             {error && <p className="banner error" role="alert">{error}</p>}
             {notice && <p className="banner success">{notice}</p>}
             {boot === 'setup' && (
               <>
-                <label>Nama kafe<Input name="cafe" required maxLength={80} placeholder="cth: Trefiko Kemang" /></label>
+                <label>Nama kafe<Input name="cafe" required maxLength={80} placeholder="cth: Kopi Sudirman" /></label>
                 <label>Nama admin<Input name="name" required maxLength={80} /></label>
                 <label>Zona waktu<SelectField label="Zona waktu" value={tz} onChange={setTz} options={[['Asia/Jakarta', 'WIB — Jakarta'], ['Asia/Makassar', 'WITA — Makassar'], ['Asia/Jayapura', 'WIT — Jayapura']]} /></label>
-                <label>Kunci setup<Input name="setupKey" type="password" autoComplete="off" /></label>
+                <label>Kunci setup <span className="muted">(khusus penyedia layanan)</span><Input name="setupKey" type="password" autoComplete="off" /></label>
               </>
             )}
             <label>Username<Input name="username" required autoComplete="username" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="cth: admin" /></label>
@@ -406,7 +407,7 @@ function Pager({ page, pages, onChange }: { page: number; pages: number; onChang
 function Receipt({ order: o, config }: { order: Order; config: Config }) {
   return (
     <article className="receipt">
-      <img src="/logo-trefiko.svg" alt="Trefiko" className="receipt-logo" />
+      <img src="/logo-perusahaan.png" alt="Penyedia layanan" className="receipt-logo" />
       <h2>{config.name}</h2>
       <p>{o.day} · {time(o.created_at, config.timezone)}</p>
       <div className="receipt-number"><span>ANTREAN</span><strong>{queueNumber(o.number)}</strong><h3>{o.customer}</h3><p>{o.mode === 'takeaway' ? 'BAWA PULANG' : 'DI SINI'}</p></div>
@@ -416,7 +417,6 @@ function Receipt({ order: o, config }: { order: Order; config: Config }) {
       <p>{{ cash: 'Tunai', qris: 'QRIS', card: 'Kartu' }[o.payment]} · <b>{statusNames[o.status]}</b></p>
       {o.cancel_reason && <p>Batal: {o.cancel_reason}</p>}
       <p className="receipt-footer">{config.footer}</p>
-      <small>Ditenagai Trefiko</small>
     </article>
   );
 }
@@ -610,7 +610,7 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   return (
     <main className="display">
       <header className="display-header">
-        <div className="brand"><img src="/logo-trefiko.svg" alt="Trefiko" className="brand-logo" />{config.name}<img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo" /></div>
+        <div className="brand"><img src="/logo-perusahaan.png" alt="Penyedia layanan" className="vendor-logo" />{config.name}</div>
         <div className="display-clock"><strong suppressHydrationWarning>{clock}</strong><span>{board?.day}</span></div>
       </header>
       {(!connected || !eventConnected) && <div className="display-warning" role="alert">Terputus — data mungkin belum terbaru.</div>}

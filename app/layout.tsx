@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Trefiko — Kasir & Antrean Kafe",
-  description: "Kasir, dapur, TV antrean, dan keuangan Trefiko.",
+  title: "Kasir & Antrean Kafe",
+  description: "Kasir, dapur, TV antrean, dan keuangan untuk kafe & UMKM.",
   icons: {
-    icon: "/logo-trefiko.svg",
-    shortcut: "/logo-trefiko.svg",
+    icon: "/logo-perusahaan.png",
+    shortcut: "/logo-perusahaan.png",
   },
 };
 
