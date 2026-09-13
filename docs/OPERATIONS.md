@@ -1,8 +1,8 @@
-# Operating Trefiko
+# Operating Temancipta
 
 ## Start a shift
 
-1. Open Trefiko on the cashier device and sign in with a cashier account.
+1. Open Temancipta on the cashier device and sign in with a cashier account.
 2. Open `/dapur` on the kitchen device using a kitchen account.
 3. Open `/display` on the device connected to the TV using a display account.
 4. Click **Aktifkan suara** once on the TV browser. Confirm the activation message is audible; select full-screen mode.
@@ -18,7 +18,7 @@ A Chrome browser on a computer connected by HDMI is a practical TV setup. The TV
 4. Print the receipt from the receipt dialog. Select an 80 mm thermal paper profile, disable browser headers/footers, and check margins. Reprint from the active list or history if printing is cancelled or fails; do not recreate the order.
 5. Kitchen: **Mulai proses** → **Siap & panggil**. A saved call event reaches the TV on its next refresh.
 6. **Panggil ulang** sends another call; **Diambil** removes the order from the active display and retains it in history.
-7. Cashier/admin can cancel an active order with a reason. Refunds are processed outside Trefiko.
+7. Cashier/admin can cancel an active order with a reason. Refunds are processed outside Temancipta.
 
 Calls are sequential, so a busy period can create an audio backlog even though the order is already visible. Calls for collected or cancelled orders are skipped. A newly opened TV starts after the current event cursor; it does not announce historical calls. Use recall for an order that needs another announcement. If audio fails or the page is reloaded, enable sound again and recall affected orders.
 
@@ -46,4 +46,4 @@ Sessions expire after 12 hours. Sign in at the start of a shift. Disabling a sta
 
 The queue refreshes every 3 seconds; display call events refresh every 5 seconds (hemat kuota request, panggilan tetap berurutan via cursor). Saved data lives in the server database, not browser local storage. New orders cannot be submitted while the board is known to be disconnected.
 
-If a save fails after an uncertain connection result, retry the same unchanged order. Trefiko reuses its request ID, so the server returns the previously saved order instead of allocating another number. Do not change the draft or reload until checking history for the original order. Browser drafts are not durable, and offline order entry is not supported.
+If a save fails after an uncertain connection result, retry the same unchanged order. Temancipta reuses its request ID, so the server returns the previously saved order instead of allocating another number. Do not change the draft or reload until checking history for the original order. Browser drafts are not durable, and offline order entry is not supported.

@@ -1,6 +1,6 @@
-# Trefiko
+# Temancipta
 
-Kasir, antrean dapur, TV display bersuara, dan keuangan untuk kafe. Brand kafe: **Trefiko**. Logo perusahaan penyedia (`logo.png` → `public/logo-perusahaan.png`) tampil kecil di header, footer, dan login.
+Kasir, antrean dapur, TV display bersuara, dan keuangan untuk kafe. Brand kafe: **Temancipta**. Logo perusahaan penyedia (`logo.png` → `public/logo-perusahaan.png`) tampil kecil di header, footer, dan login.
 
 - Nomor antrean harian reset tengah malam (WIB/WITA/WIT), tanpa batas 999.
 - Kasir 3 langkah, dapur ketuk kartu, TV panggil suara otomatis.

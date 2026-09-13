@@ -4,12 +4,12 @@ Model: tiap kafe punya D1 + Worker sendiri. Skema (`drizzle/*.sql`) identik di s
 
 ## Demo Temancipta vs produksi client
 
-- Deploy `app` (https://app.trefiko.workers.dev) = **demo & contoh milik Temancipta**. Halaman login otomatis tampil mode demo bila hostname mengandung `demo`, `temancipta`, atau `contoh`.
+- Deploy `app` (https://app.temancipta.workers.dev) = **milik Temancipta**. Halaman login tanpa tulisan demo.
 - Client baru = worker + database sendiri via `pnpm client:new`. Jangan daftarkan kafe asli di demo.
 - Domain usaha milik client: daftarkan domainnya ke akun Cloudflare (Websites → Add), lalu:
 
 ```sh
-pnpm client:domain trefiko-kopi-sudirman kasir.kopisudirman.id
+pnpm client:domain temancipta-kopi-sudirman kasir.kopisudirman.id
 ```
 
 Lalu di dashboard Workers → worker → Domains & Routes → Add custom domain. SSL gratis otomatis.
@@ -21,9 +21,9 @@ pnpm build
 pnpm client:new kopi-sudirman
 ```
 
-Skrip akan: buat D1 `trefiko-kopi-sudirman` → tulis `wrangler.kopi-sudirman.json` → migrasi remote → simpan `TREFIKO_SETUP_KEY` → deploy → catat di `clients.local.json` + tampilkan kunci setup sekali.
+Skrip akan: buat D1 `temancipta-kopi-sudirman` → tulis `wrangler.kopi-sudirman.json` → migrasi remote → simpan `TREFIKO_SETUP_KEY` → deploy → catat di `clients.local.json` + tampilkan kunci setup sekali.
 
-URL: `https://trefiko-kopi-sudirman.<subdomain>.workers.dev`. Beri kunci setup ke admin kafe, mereka setup nama kafe sendiri.
+URL: `https://temancipta-kopi-sudirman.<subdomain>.workers.dev`. Beri kunci setup ke admin kafe, mereka setup nama kafe sendiri.
 
 ## Update semua client
 

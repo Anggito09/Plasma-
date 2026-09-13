@@ -16,7 +16,7 @@ const run = (args, opts = {}) => {
 
 const registry = load();
 if (registry.clients.some(c => c.slug === slug)) throw new Error(`Client "${slug}" sudah ada di ${REGISTRY}.`);
-const dbName = `trefiko-${slug}`;
+const dbName = `temancipta-${slug}`;
 console.log(`[1/5] Membuat D1 ${dbName}...`);
 const created = run(['d1', 'create', dbName]);
 const dbId = (created.match(/[a-f0-9-]{36}/i) || [])[0];
@@ -24,7 +24,7 @@ if (!dbId) throw new Error('Tidak dapat membaca database_id dari output wrangler
 console.log(`      ID: ${dbId}`);
 
 const base = JSON.parse(readFileSync('dist/server/wrangler.json', 'utf8'));
-const workerName = `trefiko-${slug}`;
+const workerName = `temancipta-${slug}`;
 const configFile = `wrangler.${slug}.json`;
 const config = {
   ...base,

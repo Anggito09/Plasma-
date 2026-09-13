@@ -1,0 +1,35 @@
+-- Seed 30 menu generik untuk instalasi yang sudah ada (DB lama masih 12 item).
+-- Jalankan: wrangler d1 execute DB --remote --config wrangler.deploy.json --file ./scripts/seed-menu.sql
+-- Aman hanya bila BELUM ada pesanan (orders kosong). Menu lama dihapus dulu.
+DELETE FROM products;
+INSERT INTO products (id, name, category, price, active) VALUES
+('d4da38d7-9f65-42c7-8f9c-e77a01253e9a', 'Espresso', 'Kopi', 22000, 1),
+('bfff5c70-dd4f-468d-9671-8209c5040de1', 'Americano', 'Kopi', 26000, 1),
+('602009d3-8390-49c9-9d02-30ee7c18845b', 'Caffe Latte', 'Kopi', 32000, 1),
+('2118bfc6-1437-4e6e-acdf-7c779e631690', 'Cappuccino', 'Kopi', 32000, 1),
+('0df494f7-da03-49c0-86df-03e20e2dd1d0', 'Kopi Susu Gula Aren', 'Kopi', 28000, 1),
+('0f51b077-c558-453d-9330-4de0f231b475', 'Kopi Tubruk', 'Kopi', 20000, 1),
+('69eb1736-5943-4bc2-a88b-ff435a7b93e5', 'Vietnam Drip', 'Kopi', 25000, 1),
+('cf5ea6a8-b6f0-4c76-bdbb-2583449fbb00', 'Cold Brew', 'Kopi', 30000, 1),
+('80ef4d49-3089-4fa7-aa16-e25242515bfd', 'Teh Manis', 'Teh', 15000, 1),
+('6e0a96e2-b359-4415-8e68-d129a2e6c751', 'Teh Hijau Melati', 'Teh', 20000, 1),
+('62b5a8ce-65c9-4a00-b174-27b912006170', 'Lemon Tea', 'Teh', 24000, 1),
+('94f532b4-7e00-4c34-8c08-d8e549ff7caa', 'Teh Leci', 'Teh', 26000, 1),
+('a07c5ee1-e328-4533-83a5-1e41e70719f4', 'Matcha Latte', 'Non-kopi', 34000, 1),
+('50af56b2-e2e8-4d06-a81b-3d760542d04f', 'Cokelat', 'Non-kopi', 30000, 1),
+('3bbe4c86-c417-4ec2-b3b6-e409d1a09d9e', 'Susu Jahe', 'Non-kopi', 25000, 1),
+('bbca58ef-e0df-49e2-8574-740486dd87b5', 'Vanilla Milk', 'Non-kopi', 28000, 1),
+('999b322d-eac8-4a77-addb-c8199347266b', 'Soda Gembira', 'Non-kopi', 28000, 1),
+('3e8b5cde-fbb1-496f-87e3-2f750ebb593c', 'Lemon Squash', 'Non-kopi', 26000, 1),
+('115ed939-4659-4fa9-8132-e2f5cf882c03', 'Nasi Goreng', 'Makanan', 35000, 1),
+('c00e80d2-82d3-4707-a0cc-e1bec278042b', 'Mie Goreng', 'Makanan', 32000, 1),
+('f2a938c5-99ef-405f-9845-2a7769747ca2', 'Ayam Goreng + Nasi', 'Makanan', 38000, 1),
+('7ddcd89b-bd8c-4f04-b222-53ee525fcbbf', 'Soto Ayam', 'Makanan', 30000, 1),
+('25d90213-12e0-42cc-ac65-0a9c2a4032e7', 'Salad Sayur', 'Makanan', 28000, 1),
+('9816d8f0-33b6-4b14-8ac9-2c6772da4a31', 'French Fries', 'Makanan', 25000, 1),
+('eeb0c8cc-e225-459d-87b9-72e2befd49ba', 'Butter Croissant', 'Roti & Kue', 28000, 1),
+('a4f907c2-2f0d-43ec-9b18-27d399d55f93', 'Roti Bakar Cokelat', 'Roti & Kue', 25000, 1),
+('5e7ac5cc-b2cf-4f83-816d-c226f90a94f6', 'Pisang Goreng', 'Roti & Kue', 22000, 1),
+('14f3eb21-c49a-41a0-9eb2-aecbc6a7351d', 'Donat Glaze', 'Roti & Kue', 18000, 1),
+('f7950ead-36e8-4549-bcad-cae5f9cc7cdc', 'Chocolate Brownie', 'Roti & Kue', 30000, 1),
+('850fca5a-0651-412c-bb2a-1dc59ecbec34', 'Kukis Cokelat', 'Roti & Kue', 20000, 1);

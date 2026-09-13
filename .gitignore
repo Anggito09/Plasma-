@@ -53,3 +53,4 @@ next-env.d.ts
 /*-backup.sql
 
 *.tsbuildinfo
+opencode.json

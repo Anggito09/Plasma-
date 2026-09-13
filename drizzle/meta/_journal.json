@@ -15,6 +15,20 @@
       "when": 1789199999999,
       "tag": "0001_tidy_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789271330422,
+      "tag": "0002_typical_dazzler",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789277650148,
+      "tag": "0003_organic_blue_marvel",
+      "breakpoints": true
     }
   ]
 }

@@ -1,2 +1,2 @@
-import Trefiko from '../trefiko';
-export default function Page(){return <Trefiko view="riwayat"/>}
+import Temancipta from '../temancipta';
+export default function Page(){return <Temancipta view="riwayat"/>}

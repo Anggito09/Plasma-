@@ -1,4 +1,4 @@
-name: Verify Trefiko
+name: Verify Temancipta
 on:
   push:
     branches: [main]

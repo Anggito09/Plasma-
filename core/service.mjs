@@ -44,7 +44,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ configured: !!config });
             if (path === 'setup' && method === 'POST') {
                 if (config)
-                    fail(409, 'Trefiko sudah dikonfigurasi. Silakan masuk.');
+                    fail(409, 'Aplikasi sudah dikonfigurasi. Silakan masuk.');
                 if (!trustedSetup && (!setupKey || body.setupKey !== setupKey))
                     fail(403, 'Kunci setup diperlukan. Gunakan TREFIKO_SETUP_KEY dari pengelola server.');
                 const username = str(body.username, 40).toLowerCase();
@@ -55,7 +55,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const hash = await hashPassword(password), id = crypto.randomUUID();
                 const statements = [q('INSERT INTO settings(id,name,timezone,footer) VALUES(1,?,?,?)', cafe, timezone, 'Terima kasih. Silakan tunggu nomor dan nama Anda dipanggil.'), q('INSERT INTO users(id,username,name,password,role) VALUES(?,?,?,?,?)', id, username, name, hash, 'admin')];
                 if (body.sampleMenu === true)
-                    for (const [name, category, price] of [['Espresso', 'Kopi', 22000], ['Americano', 'Kopi', 26000], ['Cappuccino', 'Kopi', 32000], ['Cafe Latte', 'Kopi', 32000], ['Kopi Susu Gula Aren', 'Kopi', 28000], ['Matcha Latte', 'Non-kopi', 34000], ['Chocolate', 'Non-kopi', 30000], ['Lemon Tea', 'Non-kopi', 24000], ['Butter Croissant', 'Makanan', 28000], ['French Fries', 'Makanan', 25000], ['Chicken Sandwich', 'Makanan', 42000], ['Chocolate Brownie', 'Makanan', 30000]])
+                    for (const [name, category, price] of [['Espresso', 'Kopi', 22000], ['Americano', 'Kopi', 26000], ['Caffe Latte', 'Kopi', 32000], ['Cappuccino', 'Kopi', 32000], ['Kopi Susu Gula Aren', 'Kopi', 28000], ['Kopi Tubruk', 'Kopi', 20000], ['Vietnam Drip', 'Kopi', 25000], ['Cold Brew', 'Kopi', 30000], ['Teh Manis', 'Teh', 15000], ['Teh Hijau Melati', 'Teh', 20000], ['Lemon Tea', 'Teh', 24000], ['Teh Leci', 'Teh', 26000], ['Matcha Latte', 'Non-kopi', 34000], ['Cokelat', 'Non-kopi', 30000], ['Susu Jahe', 'Non-kopi', 25000], ['Vanilla Milk', 'Non-kopi', 28000], ['Soda Gembira', 'Non-kopi', 28000], ['Lemon Squash', 'Non-kopi', 26000], ['Nasi Goreng', 'Makanan', 35000], ['Mie Goreng', 'Makanan', 32000], ['Ayam Goreng + Nasi', 'Makanan', 38000], ['Soto Ayam', 'Makanan', 30000], ['Salad Sayur', 'Makanan', 28000], ['French Fries', 'Makanan', 25000], ['Butter Croissant', 'Roti & Kue', 28000], ['Roti Bakar Cokelat', 'Roti & Kue', 25000], ['Pisang Goreng', 'Roti & Kue', 22000], ['Donat Glaze', 'Roti & Kue', 18000], ['Chocolate Brownie', 'Roti & Kue', 30000], ['Kukis Cokelat', 'Roti & Kue', 20000]])
                         statements.push(q('INSERT INTO products(id,name,category,price) VALUES(?,?,?,?)', crypto.randomUUID(), name, category, price));
                 try {
                     await db.batch(statements);
@@ -68,7 +68,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ ok: true }, 201);
             }
             if (!config)
-                fail(503, 'Selesaikan pengaturan awal Trefiko.');
+                fail(503, 'Selesaikan pengaturan awal aplikasi.');
             if (path === 'login' && method === 'POST') {
                 const username = str(body.username, 40).toLowerCase(), password = str(body.password, 128);
                 const ip = request.headers.get('cf-connecting-ip') || 'local';
@@ -77,14 +77,14 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 if (attempt.count > 8)
                     fail(429, 'Terlalu banyak percobaan. Coba lagi setelah 15 menit.');
                 const u = await q('SELECT * FROM users WHERE username=? AND active=1', username).first();
-                const match = await checkPassword(password, u?.password || 'trefiko-dummy:0000000000000000000000000000000000000000000000000000000000000000');
+                const match = await checkPassword(password, u?.password || 'temancipta-dummy:0000000000000000000000000000000000000000000000000000000000000000');
                 if (!u || !match)
                     fail(401, 'Username atau kata sandi salah.');
                 const token = crypto.randomUUID() + crypto.randomUUID();
                 await db.batch([q('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', await digest(token), u.id, now + 43200000), q('DELETE FROM attempts WHERE key=? OR until<?', key, now), q('DELETE FROM sessions WHERE expires<?', now)]);
-                return json({ user: publicUser(u) }, 200, { 'Set-Cookie': `trefiko_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${url.protocol === 'https:' ? '; Secure' : ''}` });
+                return json({ user: publicUser(u) }, 200, { 'Set-Cookie': `temancipta_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${url.protocol === 'https:' ? '; Secure' : ''}` });
             }
-            const token = request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith('trefiko_session='))?.slice('trefiko_session='.length);
+            const token = request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith('temancipta_session='))?.slice('temancipta_session='.length);
             const user = token ? await q('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1', await digest(token), now).first() : null;
             if (!user)
                 fail(401, 'Silakan masuk untuk melanjutkan.');
@@ -95,11 +95,26 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ user: publicUser(user), config, day, serverTime: now });
             if (path === 'logout' && method === 'POST') {
                 await q('DELETE FROM sessions WHERE token=?', await digest(token)).run();
-                return json({ ok: true }, 200, { 'Set-Cookie': 'trefiko_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+                return json({ ok: true }, 200, { 'Set-Cookie': 'temancipta_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
             }
             if (path === 'products' && method === 'GET') {
                 allow('admin', 'cashier');
                 return json({ products: (await q('SELECT * FROM products ORDER BY category,name').all()).results });
+            }
+            if (path === 'payments' && method === 'GET') {
+                allow('admin', 'cashier');
+                try {
+                    await db.batch([q(`INSERT OR IGNORE INTO payments(id,name,active) VALUES('pay-tunai','Tunai',1),('pay-qris','QRIS',1),('pay-kartu','Kartu',1)`)]);
+                    return json({ payments: (await q(`SELECT * FROM payments ORDER BY CASE WHEN name IN ('Tunai','QRIS','Kartu') THEN 0 ELSE 1 END, name`).all()).results });
+                } catch { return json({ payments: [] }); }
+            }
+            if (path === 'payments' && method === 'POST') {
+                allow('admin');
+                const id = body.id ? uuid(body.id) : crypto.randomUUID(), name = str(body.name, 40);
+                const dup = await q('SELECT id FROM payments WHERE name=?', name).first();
+                if (dup && dup.id !== id) fail(409, 'Nama metode sudah dipakai.');
+                await db.batch([q('INSERT INTO payments(id,name,active) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,active=excluded.active', id, name, body.active === false ? 0 : 1), audit(user, 'payment.save', id, now)]);
+                return json({ ok: true, id });
             }
             if (path === 'products' && method === 'POST') {
                 allow('admin');
@@ -109,7 +124,10 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
             }
             if (path === 'orders' && method === 'POST') {
                 allow('admin', 'cashier');
-                const id = uuid(body.id), customer = str(body.customer, 60), mode = oneOf(body.mode, ['dine-in', 'takeaway']), payment = oneOf(body.payment, ['cash', 'qris', 'card']), note = str(body.note || '', 300, 0);
+                const id = uuid(body.id), customer = str(body.customer, 60), mode = oneOf(body.mode, ['dine-in', 'takeaway']), note = str(body.note || '', 300, 0);
+                let methods = [];
+                try { methods = (await q('SELECT name FROM payments WHERE active=1').all()).results.map(p => p.name); } catch { methods = []; }
+                const payment = oneOf(String(body.payment || '').trim().slice(0, 40), methods.length ? methods : ['Tunai', 'QRIS', 'Kartu']);
                 if (!Array.isArray(body.items) || !body.items.length || body.items.length > 50)
                     fail(400, 'Pilih 1–50 menu.');
                 const selected = body.items.map(i => ({ id: uuid(i.id), quantity: int(i.quantity, 1, 99) }));
@@ -180,7 +198,8 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 if (order.status !== from)
                     fail(409, 'Status telah berubah. Muat ulang antrean.');
                 const version = int(body.version, 1, Number.MAX_SAFE_INTEGER), reason = action === 'cancel' ? str(body.reason, 200) : null;
-                const statements = [q('UPDATE orders SET status=?,updated_at=?,version=version+1,cancel_reason=? WHERE id=? AND status=? AND version=?', to, now, reason, id, from, version)];
+                const stamp = action === 'prepare' ? ',prepared_at=COALESCE(prepared_at,?)' : action === 'ready' ? ',ready_at=COALESCE(ready_at,?)' : action === 'complete' ? ',completed_at=COALESCE(completed_at,?)' : '';
+                const statements = [q(`UPDATE orders SET status=?,updated_at=?,version=version+1,cancel_reason=?${stamp} WHERE id=? AND status=? AND version=?`, to, now, reason, ...(stamp ? [now] : []), id, from, version)];
                 if (action === 'ready')
                     statements.push(q('INSERT INTO events(request_id,order_id,day,number,customer,created_at) SELECT ?,?,?,?,?,? WHERE changes()=1', requestId, id, order.day, order.number, order.customer, now));
                 statements.push(q('INSERT INTO audit(actor,action,target,created_at) SELECT ?,?,?,? WHERE changes()=1', user.id, 'order.' + action, id, now));
@@ -201,7 +220,8 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const count = await q('SELECT COUNT(*) AS count FROM orders WHERE ' + where, ...values).first();
                 const rows = await q('SELECT * FROM orders WHERE ' + where + ' ORDER BY created_at DESC LIMIT 30 OFFSET ?', ...values, (page - 1) * 30).all();
                 const summary = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS sales,COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE day=?", date).first();
-                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary });
+                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COALESCE(AVG(CASE WHEN completed_at IS NOT NULL AND ready_at IS NOT NULL THEN completed_at-ready_at END),0) AS avg_take,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) AS n_ready FROM orders WHERE day=?", date).first();
+                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready } });
             }
             if (path === 'settings' && method === 'POST') {
                 allow('admin');
@@ -276,7 +296,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
         catch (e) {
             if (e instanceof HttpError)
                 return json({ error: e.message }, e.status);
-            console.error('Trefiko API failure', e);
+            console.error('Temancipta API failure', e);
             return json({ error: 'Layanan sementara tidak tersedia. Data isian tetap disimpan di layar; silakan coba lagi.' }, 503);
         }
     };
