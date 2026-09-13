@@ -50,7 +50,11 @@ next-env.d.ts
 /wrangler.deploy.json
 /wrangler.*.json
 /clients.local.json
+/backups/
 /*-backup.sql
 
 *.tsbuildinfo
 opencode.json
+public/promo/*
+!public/promo/list.json
+/temancipta-paket-promosi-tv/
