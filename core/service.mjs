@@ -220,14 +220,16 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const count = await q('SELECT COUNT(*) AS count FROM orders WHERE ' + where, ...values).first();
                 const rows = await q('SELECT * FROM orders WHERE ' + where + ' ORDER BY created_at DESC LIMIT 30 OFFSET ?', ...values, (page - 1) * 30).all();
                 const summary = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS sales,COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE day=?", date).first();
-                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COALESCE(AVG(CASE WHEN completed_at IS NOT NULL AND ready_at IS NOT NULL THEN completed_at-ready_at END),0) AS avg_take,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) AS n_ready FROM orders WHERE day=?", date).first();
+                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COALESCE(AVG(CASE WHEN completed_at IS NOT NULL AND ready_at IS NOT NULL THEN completed_at-ready_at END),0) AS avg_take,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready FROM orders WHERE day=?", date).first();
                 const durs = (await q('SELECT ready_at-created_at AS d FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at>=created_at ORDER BY d', date).all()).results.map(r => r.d);
                 const medianReady = durs.length ? durs[Math.floor(durs.length / 2)] : 0;
                 const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
                 const onTarget = await q('SELECT COUNT(*) AS n FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at-created_at<=?', date, targetMin * 60000).first();
                 const slowest = (await q('SELECT number,customer,ready_at-created_at AS wait FROM orders WHERE day=? AND ready_at IS NOT NULL ORDER BY wait DESC LIMIT 10', date).all()).results;
                 const perCustomer = (await q("SELECT customer,COUNT(*) AS n,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS spent,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait,MAX(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS maxwait FROM orders WHERE day=? GROUP BY customer HAVING avgwait IS NOT NULL ORDER BY avgwait DESC LIMIT 8", date).all()).results;
-                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready, medianReady, perCustomer, targetMin, nOnTarget: onTarget.n, slowest } });
+                const tzOff = config.timezone === 'Asia/Makassar' ? 8 * 3600000 : config.timezone === 'Asia/Jayapura' ? 9 * 3600000 : 7 * 3600000;
+                const perHour = (await q("SELECT CAST(((created_at + ?) / 3600000) % 24 AS INTEGER) AS h,COUNT(*) AS n,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait FROM orders WHERE day=? AND status!='cancelled' GROUP BY h ORDER BY h", tzOff, date).all()).results;
+                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready, medianReady, perCustomer, perHour, targetMin, nOnTarget: onTarget.n, slowest } });
             }
             if (path === 'settings' && method === 'POST') {
                 allow('admin');
@@ -306,7 +308,8 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
                 if (days > 93)
                     fail(400, 'Maksimal 93 hari.');
-                const agg = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales,COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE day>=? AND day<=? AND status!='cancelled'", from, to).first();
+                const agg = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales FROM orders WHERE day>=? AND day<=? AND status!='cancelled'", from, to).first();
+                agg.cancelled = (await q("SELECT COUNT(*) AS n FROM orders WHERE day>=? AND day<=? AND status='cancelled'", from, to).first()).n;
                 const perDay = (await q("SELECT day,COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY day ORDER BY day", from, to).all()).results;
                 const paymix = (await q("SELECT payment,COUNT(*) AS n FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY payment ORDER BY n DESC", from, to).all()).results;
                 const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
@@ -340,7 +343,11 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const deadMenu = deadNames.map((name, i) => ({ name, saran: deadNames.length >= 5 && i >= 3 ? 'coret' : 'promo' }));
                 const slowMenu = Object.values(waitByMenu).map(v => ({ name: v.name, avgWait: Math.round(v.totalWait / v.n), maxWait: v.maxWait, n: v.n })).sort((a, b) => b.avgWait - a.avgWait || b.n - a.n).slice(0, 8);
                 const pctOn = timing.n_ready ? Math.round(timing.n_on / timing.n_ready * 100) : 0;
-                const stats = { from, to, days, orders: agg.orders, sales: agg.sales, cancelled: agg.cancelled, avgTicket: agg.orders ? Math.round(agg.sales / agg.orders) : 0, perDay, paymix, topItems, avgReady: timing.avg_ready, medianReady, nReady: timing.n_ready, nOnTarget: timing.n_on, pctOnTarget: pctOn, targetMin, slowMenu, deadMenu };
+                const targetTrend = (await q('SELECT day,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready,COUNT(CASE WHEN ready_at IS NOT NULL AND ready_at-created_at<=? THEN 1 END) AS n_on FROM orders WHERE day>=? AND day<=? GROUP BY day ORDER BY day', targetMin * 60000, from, to).all()).results.map(r => ({ day: r.day, pct: r.n_ready ? Math.round(r.n_on / r.n_ready * 100) : null, n: r.n_ready }));
+                const tzOff = config.timezone === 'Asia/Makassar' ? 8 * 3600000 : config.timezone === 'Asia/Jayapura' ? 9 * 3600000 : 7 * 3600000;
+                const perHour = (await q("SELECT CAST(((created_at + ?) / 3600000) % 24 AS INTEGER) AS h,COUNT(*) AS n,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY h ORDER BY h", tzOff, from, to).all()).results;
+                const peak = perHour.filter(r => r.avgwait != null).sort((a, b) => b.avgwait - a.avgwait)[0] || null;
+                const stats = { from, to, days, orders: agg.orders, sales: agg.sales, cancelled: agg.cancelled, avgTicket: agg.orders ? Math.round(agg.sales / agg.orders) : 0, perDay, paymix, topItems, avgReady: timing.avg_ready, medianReady, nReady: timing.n_ready, nOnTarget: timing.n_on, pctOnTarget: pctOn, targetMin, slowMenu, deadMenu, targetTrend, perHour, peakHour: peak ? { h: peak.h, avgWait: Math.round(peak.avgwait), n: peak.n } : null };
                 let narrative = '', source = 'aturan';
                 const rupiah = n => 'Rp' + Math.round(n).toLocaleString('id-ID');
                 const fmt = ms => {
@@ -368,7 +375,12 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                         if (deadCoret.length) menu += ` Pertimbangkan coret: ${deadCoret.slice(0, 4).join(', ')}.`;
                         lines.push(menu);
                     } else lines.push(`2. Menu: belum ada penjualan pada rentang ini.${deadMenu.length ? ` Menu mati (0 laku): ${deadMenu.slice(0, 6).map(d => d.name).join(', ')} — saran promo/coret.` : ''}`);
-                    if (timing.n_ready) lines.push(`3. Kecepatan vs target: rata-rata ${fmt(timing.avg_ready)} (tipikal ${fmt(medianReady)}), tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready}).${timing.avg_ready > targetMin * 60000 ? ' Butuh evaluasi dapur/jam ramai.' : ' Kecepatan bagus — pertahankan.'}`);
+                    const rated = targetTrend.filter(t => t.pct != null);
+                    const best = rated.length ? rated.reduce((a, b) => b.pct - a.pct >= 0 ? b : a) : null;
+                    const worst = rated.length ? rated.reduce((a, b) => b.pct - a.pct <= 0 ? b : a) : null;
+                    const peakTxt = stats.peakHour ? ` Jam tersibuk ${String(stats.peakHour.h).padStart(2, '0')}.00 (rata ${fmt(stats.peakHour.avgWait)}, ${stats.peakHour.n} pesanan).` : '';
+                    const trendTxt = rated.length > 1 && best && worst && best.day !== worst.day ? ` Terbaik ${best.day} (${best.pct}%), terlemah ${worst.day} (${worst.pct}%).` : '';
+                    if (timing.n_ready) lines.push(`3. Kecepatan vs target: rata-rata ${fmt(timing.avg_ready)} (tipikal ${fmt(medianReady)}), tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready}).${peakTxt}${trendTxt}${timing.avg_ready > targetMin * 60000 ? ' Butuh evaluasi dapur/jam ramai.' : ' Kecepatan bagus — pertahankan.'}`);
                     else lines.push(`3. Kecepatan: belum ada pesanan yang sampai siap. Target ${targetMin} mnt belum terukur.`);
                     if (paymix.length) {
                         const top = paymix[0], share = agg.orders ? Math.round(top.n / agg.orders * 100) : 0;
@@ -379,7 +391,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                     if (slowMenu.length && slowMenu[0].avgWait > targetMin * 60000) recs.push(`percepat ${slowMenu[0].name} (rata-rata ${fmt(slowMenu[0].avgWait)})`);
                     if (deadPromo.length) recs.push(`promo ${deadPromo[0]} (0 laku)`);
                     else if (deadCoret.length) recs.push(`coret ${deadCoret[0]} (tidak laku)`);
-                    if (pctOn < 85 && timing.n_ready) recs.push(`kejar target ${targetMin} mnt di jam ramai`);
+                    if (pctOn < 85 && timing.n_ready) recs.push(stats.peakHour ? `tambah orang jam ${String(stats.peakHour.h).padStart(2, '0')}.00 (rata ${fmt(stats.peakHour.avgWait)})` : `kejar target ${targetMin} mnt di jam ramai`);
                     if (/tunai/i.test(paymix[0]?.payment || '') && agg.orders && Math.round(paymix[0].n / agg.orders * 100) >= 50) recs.push(`dorong QRIS`);
                     if (!recs.length) recs.push('pertahankan jam ramai', 'cek stok andalan', 'pantau kecepatan harian');
                     lines.push(`5. Saran: ${recs.slice(0, 3).join('; ')}.`);
@@ -398,10 +410,12 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                         matiPromo: deadPromo.slice(0, 8),
                         matiCoret: deadCoret.slice(0, 8),
                         kecepatan: `rata ${fmt(timing.avg_ready)}, tipikal ${fmt(medianReady)}, tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready})`,
+                        jamRamai: stats.peakHour ? `jam ${String(stats.peakHour.h).padStart(2, '0')}.00 rata ${fmt(stats.peakHour.avgWait)} dari ${stats.peakHour.n} pesanan` : 'belum ada data siap',
+                        trenTarget: targetTrend.filter(t => t.pct != null).map(t => `${t.day} ${t.pct}%`).join(', ') || 'satu hari',
                         bayar: paymix.slice(0, 4).map(p => `${p.payment} ${p.n}x`),
                     };
                     const res = await ai.run('@cf/meta/llama-3.1-8b-instruct', { messages: [
-                        { role: 'system', content: 'Kamu analis kafe. Jawab Bahasa Indonesia. Tepat 5 baris bernomor 1. sampai 5. Maksimal 200 kata. Jangan sebut nama pelanggan. Jangan mengarang angka — pakai data user. Struktur wajib: 1) tren penjualan (omzet, jumlah pesanan, naik/turun), 2) menu andalan + menu lambat (sebut "rata-rata X mnt, paling lambat") + menu mati 0 laku dengan saran promo atau coret, 3) kecepatan vs target — wajib frasa "tercapai N% dari target M mnt", 4) metode pembayaran, 5) tiga saran konkret. Jangan tambah baris ke-6.' },
+                        { role: 'system', content: 'Kamu analis kafe. Jawab Bahasa Indonesia. Tepat 5 baris bernomor 1. sampai 5. Maksimal 200 kata. Jangan sebut nama pelanggan. Jangan mengarang angka — pakai data user. Struktur wajib: 1) tren penjualan (omzet, jumlah pesanan, naik/turun), 2) menu andalan + menu lambat (sebut "rata-rata X mnt, paling lambat") + menu mati 0 laku dengan saran promo atau coret, 3) kecepatan vs target — wajib frasa "tercapai N% dari target M mnt" plus jam tersibuk dan hari terbaik/terlemah bila ada datanya, 4) metode pembayaran, 5) tiga saran konkret (satu harus soal jam tersibuk bila kecepatan di bawah target). Jangan tambah baris ke-6.' },
                         { role: 'user', content: `Fakta: ${JSON.stringify(facts)}. Tulis 5 baris sesuai struktur. Baris 3 wajib memuat: tercapai ${pctOn}% dari target ${targetMin} mnt.` },
                     ] });
                     narrative = String(res?.response || '').slice(0, 2000);

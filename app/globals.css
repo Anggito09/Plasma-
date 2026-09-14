@@ -132,6 +132,19 @@ body{background:radial-gradient(rgba(154,74,30,.06) 1.2px,transparent 1.2px),rad
 .hist-split{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-bottom:16px}
 .hist-card{margin:0}
 .hist-num{font-family:ui-monospace,monospace;font-weight:800;color:#9a4a1e;font-size:.9rem;min-width:52px}
+.hour-card{margin-bottom:16px}
+.hour-grid{display:flex;gap:8px;overflow-x:auto;padding:6px 2px 2px;margin-top:10px}
+.hour-cell{display:flex;flex-direction:column;align-items:center;gap:4px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 8px;min-width:62px;animation:rise .3s ease backwards}
+.hour-cell.over{border-color:#f5c6c0;background:linear-gradient(180deg,#fff7ee,#fff)}
+.hour-cell b{font-size:.8rem;color:#9a4a1e}
+.hour-bar{height:56px;width:100%;display:flex;align-items:flex-end;justify-content:center;background:#fbf1e4;border-radius:8px;padding:4px}
+.hour-bar i{width:16px;border-radius:5px;background:linear-gradient(180deg,#9a4a1e,#e9a25b);animation:growUp .6s ease backwards;display:block}
+.hour-cell.over .hour-bar i{background:linear-gradient(180deg,#f43f5e,#a31e13)}
+.hour-cell span{font-size:.72rem;font-weight:800}
+.hour-cell small{font-size:.66rem;color:#8a6f5c;font-variant-numeric:tabular-nums}
+.trend-day-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.trow{display:grid;grid-template-columns:52px 1fr 52px;gap:10px;align-items:center;font-size:.82rem;animation:rise .3s ease backwards}
+.trow span{font-weight:700;color:#8a6f5c}.trow b{text-align:right;font-variant-numeric:tabular-nums}
 .hist-list{background:linear-gradient(180deg,#fff,#fffaf1);border:1px solid var(--border);border-radius:18px;padding:16px 16px 10px}
 .hist-row{display:grid;grid-template-columns:88px 1fr 92px 140px 42px;gap:12px;align-items:center;background:#fffdf9;border:1px solid var(--border);border-left:4px solid #d7c3a8;border-radius:14px;padding:11px 12px;margin-bottom:8px;animation:rise .3s ease backwards;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
 .hist-row:hover{transform:translateY(-2px);box-shadow:0 14px 24px -20px rgba(154,74,30,.55);border-color:#e9a25b}

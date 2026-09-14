@@ -739,7 +739,14 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
             const Icon = meta.icon;
             return <p key={i} className={'ai-line ' + meta.cls} style={{ animationDelay: `${i * 0.07}s` }}><span className="ai-ico"><Icon size={15} /></span><span className="ai-body"><em>{i + 1} · {meta.tag}</em><span>{line.replace(/^\d+\.\s*/, '')}</span></span></p>;
           })}</div>
-          <p className="ai-src"><span className={'ai-badge ' + (ai.source === 'ai' ? 'cloud' : '')}>{ai.source === 'ai' ? 'AI' : 'Aturan'}</span> <span className="muted">{ai.from}–{ai.to}{ai.nReady ? ` · rata ${fmtDur(ai.avgReady)} · tipikal ${fmtDur(ai.medianReady)} (${ai.nOnTarget}/${ai.nReady} on target)` : ''}</span></p>
+          <p className="ai-src"><span className={'ai-badge ' + (ai.source === 'ai' ? 'cloud' : '')}>{ai.source === 'ai' ? 'AI' : 'Aturan'}</span> <span className="muted">{ai.from}–{ai.to}{ai.nReady ? ` · rata ${fmtDur(ai.avgReady)} · tipikal ${fmtDur(ai.medianReady)} (${ai.nOnTarget}/${ai.nReady} on target)` : ''}{ai.peakHour ? ` · tersibuk ${String(ai.peakHour.h).padStart(2, '0')}.00` : ''}</span></p>
+          {!!ai.targetTrend?.some((t: any) => t.pct != null) && (
+            <div className="ai-card mt"><h3><Target size={15} /> Ketercapaian target per hari</h3>
+              <div className="trend-day-list">{ai.targetTrend.map((t: any) => t.pct == null ? null : (
+                <div className="trow" key={t.day} style={{ animationDelay: '0s' }}><span>{t.day.slice(5)}</span><div className="bar-track"><div className={'bar ' + (t.pct >= 85 ? 'in' : 'out')} style={{ width: `${Math.max(3, t.pct)}%` }} /></div><b>{t.pct}%</b></div>
+              ))}</div>
+            </div>
+          )}
           <div className="ai-grid">
             {!!ai.topItems?.length && <div className="ai-card"><h3><Trophy size={15} /> Menu laris</h3><div className="rank-list">{(() => { const mx = Math.max(1, ...ai.topItems.map((t: any) => t.qty)); return ai.topItems.map((t: any, i: number) => <div key={t.name} className="rank-row" style={{ animationDelay: `${i * 0.05}s` }}>
               <span className={'rank r' + Math.min(i + 1, 3)}>{i + 1}</span>
@@ -773,7 +780,6 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   const [announcement, setAnnouncement] = useState<any>(null);
   const [clock, setClock] = useState('');
   const [rotation, setRotation] = useState(0);
-  useEffect(() => { fetch('/promo/list.json', { cache: 'no-store' }).then(r => r.json()).then(d => { if (Array.isArray(d)) setPromos(d.filter(x => typeof x === 'string').slice(0, 12)); }).catch(() => { }); }, []);
   const [eventConnected, setEventConnected] = useState(true);
   const latestBoard = useRef(board);
   const cursor = useRef<number | null>(null);
@@ -975,6 +981,20 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
               ))}</div>
             </div>
           )}
+        </div>
+      )}
+      {!!data?.summary.perHour?.length && (
+        <div className="ai-card hist-card hour-card">
+          <h3><Clock size={15} /> Jam ramai hari ini</h3>
+          <p className="muted sm">Rata pesan→siap per jam (waktu kafe). Merah = lewat target {targetMin} mnt.</p>
+          <div className="hour-grid">{(() => { const mx = Math.max(1, ...data.summary.perHour.map((r: any) => r.n)); return data.summary.perHour.map((r: any) => {
+            const over = r.avgwait != null && r.avgwait > targetMin * 60000;
+            return <div key={r.h} className={'hour-cell' + (over ? ' over' : '')} title={`${r.n} pesanan, rata ${fmtDur(r.avgwait)}`}>
+              <b>{String(r.h).padStart(2, '0')}</b>
+              <div className="hour-bar"><i style={{ height: `${Math.max(6, (r.n / mx) * 100)}%` }} /></div>
+              <span>{r.n}x</span><small>{fmtDur(r.avgwait)}</small>
+            </div>;
+          }); })()}</div>
         </div>
       )}
       <div className="hist-list">
