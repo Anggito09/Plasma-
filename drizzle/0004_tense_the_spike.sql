@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `target_ready_min` integer DEFAULT 10 NOT NULL;

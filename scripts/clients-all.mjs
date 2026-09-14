@@ -12,7 +12,7 @@ const base = JSON.parse(readFileSync('dist/server/wrangler.json', 'utf8'));
 const failed = [];
 for (const c of registry.clients) {
   console.log(`\n=== ${c.slug} (${c.dbName}) ===`);
-  const config = { ...base, name: c.worker, main: './dist/server/index.js', assets: { directory: './dist/client' }, vars: { ...base.vars, TREFIKO_STANDALONE: 'true' }, d1_databases: [{ binding: 'DB', database_name: c.dbName, database_id: c.dbId, migrations_dir: './drizzle' }] };
+  const config = { ...base, name: c.worker, main: './dist/server/index.js', assets: { directory: './dist/client' }, vars: { ...base.vars, TREFIKO_STANDALONE: 'true' }, ai: { binding: 'AI' }, d1_databases: [{ binding: 'DB', database_name: c.dbName, database_id: c.dbId, migrations_dir: './drizzle' }] };
   writeFileSync(c.config, JSON.stringify(config, null, 2) + '\n');
   const steps = mode === 'migrate' ? [['d1', 'migrations', 'apply', 'DB', '--remote', '--config', c.config]] : mode === 'deploy' ? [['deploy', '--config', c.config]] : [['d1', 'migrations', 'apply', 'DB', '--remote', '--config', c.config], ['deploy', '--config', c.config]];
   for (const args of steps) {

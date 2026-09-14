@@ -14,7 +14,7 @@ const oneOf = (x, values) => { if (!values.includes(x))
 const publicUser = u => ({ id: u.id, name: u.name, username: u.username, role: u.role });
 const parseOrder = o => o ? ({ ...o, items: JSON.parse(o.items), fingerprint: undefined }) : null;
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
-export function createService(db, { clock = () => Date.now(), setupKey = '', trustedSetup = false } = {}) {
+export function createService(db, { clock = () => Date.now(), setupKey = '', trustedSetup = false, ai = null } = {}) {
     const q = (sql, ...args) => db.prepare(sql).bind(...args);
     const audit = (user, action, target, now) => q('INSERT INTO audit(actor,action,target,created_at) VALUES (?,?,?,?)', user.id, action, target, now);
     return async function handle(request) {
@@ -117,7 +117,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ ok: true, id });
             }
             if (path === 'products' && method === 'POST') {
-                allow('admin');
+                allow('admin', 'cashier');
                 const id = body.id ? uuid(body.id) : crypto.randomUUID(), name = str(body.name, 80), category = str(body.category, 40), price = int(body.price, 0, 100000000), active = body.active === false ? 0 : 1;
                 await db.batch([q('INSERT INTO products(id,name,category,price,active) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,category=excluded.category,price=excluded.price,active=excluded.active', id, name, category, price, active), audit(user, 'product.save', id, now)]);
                 return json({ ok: true, id });
@@ -221,12 +221,19 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const rows = await q('SELECT * FROM orders WHERE ' + where + ' ORDER BY created_at DESC LIMIT 30 OFFSET ?', ...values, (page - 1) * 30).all();
                 const summary = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS sales,COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE day=?", date).first();
                 const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COALESCE(AVG(CASE WHEN completed_at IS NOT NULL AND ready_at IS NOT NULL THEN completed_at-ready_at END),0) AS avg_take,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) AS n_ready FROM orders WHERE day=?", date).first();
-                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready } });
+                const durs = (await q('SELECT ready_at-created_at AS d FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at>=created_at ORDER BY d', date).all()).results.map(r => r.d);
+                const medianReady = durs.length ? durs[Math.floor(durs.length / 2)] : 0;
+                const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
+                const onTarget = await q('SELECT COUNT(*) AS n FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at-created_at<=?', date, targetMin * 60000).first();
+                const slowest = (await q('SELECT number,customer,ready_at-created_at AS wait FROM orders WHERE day=? AND ready_at IS NOT NULL ORDER BY wait DESC LIMIT 10', date).all()).results;
+                const perCustomer = (await q("SELECT customer,COUNT(*) AS n,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS spent,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait,MAX(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS maxwait FROM orders WHERE day=? GROUP BY customer HAVING avgwait IS NOT NULL ORDER BY avgwait DESC LIMIT 8", date).all()).results;
+                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready, medianReady, perCustomer, targetMin, nOnTarget: onTarget.n, slowest } });
             }
             if (path === 'settings' && method === 'POST') {
                 allow('admin');
                 const name = str(body.name, 80), footer = str(body.footer, 200, 0);
-                await db.batch([q('UPDATE settings SET name=?,footer=? WHERE id=1', name, footer), audit(user, 'settings.update', '1', now)]);
+                const target = body.target === undefined || body.target === '' ? (Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10) : int(Number(body.target), 1, 180);
+                await db.batch([q('UPDATE settings SET name=?,footer=?,target_ready_min=? WHERE id=1', name, footer, target), audit(user, 'settings.update', '1', now)]);
                 return json({ ok: true });
             }
             if (path === 'users' && method === 'GET') {
@@ -290,6 +297,120 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const id = uuid(body.id);
                 await db.batch([q('DELETE FROM expenses WHERE id=?', id), audit(user, 'expense.delete', id, now)]);
                 return json({ ok: true });
+            }
+            if (path === 'insights' && method === 'GET') {
+                allow('admin');
+                const from = url.searchParams.get('from') || day, to = url.searchParams.get('to') || day;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+                    fail(400, 'Rentang tanggal tidak valid.');
+                const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+                if (days > 93)
+                    fail(400, 'Maksimal 93 hari.');
+                const agg = await q("SELECT COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales,COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE day>=? AND day<=? AND status!='cancelled'", from, to).first();
+                const perDay = (await q("SELECT day,COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY day ORDER BY day", from, to).all()).results;
+                const paymix = (await q("SELECT payment,COUNT(*) AS n FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY payment ORDER BY n DESC", from, to).all()).results;
+                const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
+                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready,COUNT(CASE WHEN ready_at IS NOT NULL AND ready_at-created_at<=? THEN 1 END) AS n_on FROM orders WHERE day>=? AND day<=?", targetMin * 60000, from, to).first();
+                const medianRows = (await q('SELECT ready_at-created_at AS d FROM orders WHERE day>=? AND day<=? AND ready_at IS NOT NULL AND ready_at>=created_at ORDER BY d', from, to).all()).results.map(r => r.d);
+                const medianReady = medianRows.length ? medianRows[Math.floor(medianRows.length / 2)] : 0;
+                const itemRows = (await q("SELECT items,ready_at,created_at FROM orders WHERE day>=? AND day<=? AND status!='cancelled' LIMIT 3000", from, to).all()).results;
+                const items = {};
+                const waitByMenu = {};
+                for (const r of itemRows) {
+                    let wait = r.ready_at != null && r.created_at != null && r.ready_at >= r.created_at ? r.ready_at - r.created_at : null;
+                    try {
+                        for (const i of JSON.parse(r.items)) {
+                            const name = String(i.name || '').slice(0, 60);
+                            if (!name) continue;
+                            items[name] = items[name] || { name, qty: 0, revenue: 0 };
+                            items[name].qty += i.quantity || 0;
+                            items[name].revenue += (i.quantity || 0) * (i.price || 0);
+                            if (wait != null) {
+                                waitByMenu[name] = waitByMenu[name] || { name, totalWait: 0, n: 0, maxWait: 0 };
+                                waitByMenu[name].totalWait += wait;
+                                waitByMenu[name].n += 1;
+                                waitByMenu[name].maxWait = Math.max(waitByMenu[name].maxWait, wait);
+                            }
+                        }
+                    } catch { }
+                }
+                const topItems = Object.values(items).sort((a, b) => b.qty - a.qty).slice(0, 8);
+                const activeProducts = (await q('SELECT name FROM products WHERE active=1 ORDER BY name').all()).results.map(r => String(r.name));
+                const deadNames = activeProducts.filter(n => !items[n]);
+                const deadMenu = deadNames.map((name, i) => ({ name, saran: deadNames.length >= 5 && i >= 3 ? 'coret' : 'promo' }));
+                const slowMenu = Object.values(waitByMenu).map(v => ({ name: v.name, avgWait: Math.round(v.totalWait / v.n), maxWait: v.maxWait, n: v.n })).sort((a, b) => b.avgWait - a.avgWait || b.n - a.n).slice(0, 8);
+                const pctOn = timing.n_ready ? Math.round(timing.n_on / timing.n_ready * 100) : 0;
+                const stats = { from, to, days, orders: agg.orders, sales: agg.sales, cancelled: agg.cancelled, avgTicket: agg.orders ? Math.round(agg.sales / agg.orders) : 0, perDay, paymix, topItems, avgReady: timing.avg_ready, medianReady, nReady: timing.n_ready, nOnTarget: timing.n_on, pctOnTarget: pctOn, targetMin, slowMenu, deadMenu };
+                let narrative = '', source = 'aturan';
+                const rupiah = n => 'Rp' + Math.round(n).toLocaleString('id-ID');
+                const fmt = ms => {
+                    if (!ms) return '–';
+                    const m = Math.round(ms / 60000);
+                    if (m < 60) return `${m} mnt`;
+                    return `${Math.floor(m / 60)} j ${m % 60} mnt`;
+                };
+                const trenHalf = () => {
+                    if (perDay.length < 2) return '';
+                    const half = Math.floor(perDay.length / 2), a = perDay.slice(0, half).reduce((s, d) => s + d.sales, 0), b = perDay.slice(half).reduce((s, d) => s + d.sales, 0);
+                    const pct = a ? Math.round((b - a) / a * 100) : 0;
+                    return ` Paruh kedua ${pct >= 0 ? 'naik' : 'turun'} ${Math.abs(pct)}% vs paruh pertama.`;
+                };
+                const slowPhrase = s => `${s.name} rata-rata ${fmt(s.avgWait)}`;
+                const deadPromo = deadMenu.filter(d => d.saran === 'promo').map(d => d.name);
+                const deadCoret = deadMenu.filter(d => d.saran === 'coret').map(d => d.name);
+                const rules = () => {
+                    const lines = [];
+                    lines.push(`1. Tren: ${from}–${to} ${agg.orders} pesanan, omzet ${rupiah(agg.sales)}, nota rata-rata ${rupiah(stats.avgTicket)}.${trenHalf()}`);
+                    if (topItems.length) {
+                        let menu = `2. Menu andalan: ${topItems.slice(0, 3).map(t => `${t.name} (${t.qty}x)`).join(', ')}.`;
+                        if (slowMenu.length) menu += ` ${slowPhrase(slowMenu[0])}, paling lambat.${slowMenu[1] ? ` Lalu ${slowPhrase(slowMenu[1])}.` : ''}`;
+                        if (deadPromo.length) menu += ` Menu mati (0 laku), saran promo: ${deadPromo.slice(0, 4).join(', ')}.`;
+                        if (deadCoret.length) menu += ` Pertimbangkan coret: ${deadCoret.slice(0, 4).join(', ')}.`;
+                        lines.push(menu);
+                    } else lines.push(`2. Menu: belum ada penjualan pada rentang ini.${deadMenu.length ? ` Menu mati (0 laku): ${deadMenu.slice(0, 6).map(d => d.name).join(', ')} — saran promo/coret.` : ''}`);
+                    if (timing.n_ready) lines.push(`3. Kecepatan vs target: rata-rata ${fmt(timing.avg_ready)} (tipikal ${fmt(medianReady)}), tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready}).${timing.avg_ready > targetMin * 60000 ? ' Butuh evaluasi dapur/jam ramai.' : ' Kecepatan bagus — pertahankan.'}`);
+                    else lines.push(`3. Kecepatan: belum ada pesanan yang sampai siap. Target ${targetMin} mnt belum terukur.`);
+                    if (paymix.length) {
+                        const top = paymix[0], share = agg.orders ? Math.round(top.n / agg.orders * 100) : 0;
+                        const rest = paymix.slice(1, 3).map(p => `${p.payment} (${p.n}x)`).join(', ');
+                        lines.push(`4. Bayar: ${top.payment} dominan ${share}% (${top.n}x)${rest ? ', lalu ' + rest : ''}.${/tunai/i.test(top.payment) && share >= 50 ? ' Dorong QRIS/bank.' : ''}`);
+                    } else lines.push(`4. Bayar: belum ada data.`);
+                    const recs = [];
+                    if (slowMenu.length && slowMenu[0].avgWait > targetMin * 60000) recs.push(`percepat ${slowMenu[0].name} (rata-rata ${fmt(slowMenu[0].avgWait)})`);
+                    if (deadPromo.length) recs.push(`promo ${deadPromo[0]} (0 laku)`);
+                    else if (deadCoret.length) recs.push(`coret ${deadCoret[0]} (tidak laku)`);
+                    if (pctOn < 85 && timing.n_ready) recs.push(`kejar target ${targetMin} mnt di jam ramai`);
+                    if (/tunai/i.test(paymix[0]?.payment || '') && agg.orders && Math.round(paymix[0].n / agg.orders * 100) >= 50) recs.push(`dorong QRIS`);
+                    if (!recs.length) recs.push('pertahankan jam ramai', 'cek stok andalan', 'pantau kecepatan harian');
+                    lines.push(`5. Saran: ${recs.slice(0, 3).join('; ')}.`);
+                    return lines.join('\n');
+                };
+                try {
+                    if (!ai) throw new Error('no-ai');
+                    const facts = {
+                        periode: `${from}–${to} (${days} hari)`,
+                        pesanan: agg.orders,
+                        omzet: Math.round(agg.sales),
+                        notaRata: stats.avgTicket,
+                        tren: trenHalf().trim() || 'satu hari',
+                        andalan: topItems.slice(0, 5).map(t => `${t.name} ${t.qty}x`),
+                        lambat: slowMenu.slice(0, 5).map(s => `${s.name} rata-rata ${fmt(s.avgWait)} (${s.n} pesanan)`),
+                        matiPromo: deadPromo.slice(0, 8),
+                        matiCoret: deadCoret.slice(0, 8),
+                        kecepatan: `rata ${fmt(timing.avg_ready)}, tipikal ${fmt(medianReady)}, tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready})`,
+                        bayar: paymix.slice(0, 4).map(p => `${p.payment} ${p.n}x`),
+                    };
+                    const res = await ai.run('@cf/meta/llama-3.1-8b-instruct', { messages: [
+                        { role: 'system', content: 'Kamu analis kafe. Jawab Bahasa Indonesia. Tepat 5 baris bernomor 1. sampai 5. Maksimal 200 kata. Jangan sebut nama pelanggan. Jangan mengarang angka — pakai data user. Struktur wajib: 1) tren penjualan (omzet, jumlah pesanan, naik/turun), 2) menu andalan + menu lambat (sebut "rata-rata X mnt, paling lambat") + menu mati 0 laku dengan saran promo atau coret, 3) kecepatan vs target — wajib frasa "tercapai N% dari target M mnt", 4) metode pembayaran, 5) tiga saran konkret. Jangan tambah baris ke-6.' },
+                        { role: 'user', content: `Fakta: ${JSON.stringify(facts)}. Tulis 5 baris sesuai struktur. Baris 3 wajib memuat: tercapai ${pctOn}% dari target ${targetMin} mnt.` },
+                    ] });
+                    narrative = String(res?.response || '').slice(0, 2000);
+                    if (!narrative) throw new Error('empty');
+                    const numbered = narrative.split('\n').map(s => s.trim()).filter(l => /^\d+\./.test(l));
+                    if (numbered.length < 5) throw new Error('structure');
+                    source = 'ai';
+                } catch { narrative = rules(); }
+                return json({ ...stats, narrative, source });
             }
             fail(404, 'Halaman API tidak ditemukan.');
         }

@@ -32,6 +32,7 @@ const config = {
   main: './dist/server/index.js',
   assets: { directory: './dist/client' },
   vars: { ...base.vars, TREFIKO_STANDALONE: 'true' },
+  ai: { binding: 'AI' },
   d1_databases: [{ binding: 'DB', database_name: dbName, database_id: dbId, migrations_dir: './drizzle' }],
 };
 writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n');

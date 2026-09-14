@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
-export const settings = sqliteTable('settings', { id: integer('id').primaryKey(), name: text('name').notNull(), timezone: text('timezone').notNull(), footer: text('footer').notNull() });
+export const settings = sqliteTable('settings', { id: integer('id').primaryKey(), name: text('name').notNull(), timezone: text('timezone').notNull(), footer: text('footer').notNull(), targetReadyMin: integer('target_ready_min').notNull().default(10) });
 export const users = sqliteTable('users', { id: text('id').primaryKey(), username: text('username').notNull().unique(), name: text('name').notNull(), password: text('password').notNull(), role: text('role').notNull(), active: integer('active').notNull().default(1) });
 export const sessions = sqliteTable('sessions', { token: text('token').primaryKey(), userId: text('user_id').notNull().references(()=>users.id), expires: integer('expires').notNull() });
 export const attempts = sqliteTable('attempts', { key: text('key').primaryKey(), count: integer('count').notNull(), until: integer('until').notNull() });

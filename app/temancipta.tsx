@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Coffee, Monitor, ChefHat, ReceiptText, Settings, LogOut, Search, Plus, Minus, ShoppingBag, Utensils, ArrowRight, Volume2, VolumeX, Maximize, Check, Clock, RotateCcw, Printer, X, Users, ShieldCheck, Ticket, ChevronLeft, ChevronRight, Loader2, Pencil, Archive, Wallet, TrendingUp, TrendingDown, Trash2, Sparkles, Store, CupSoda, CakeSlice, Sandwich, Cookie, Croissant, Donut, Milk, Leaf, Snowflake, GlassWater, Citrus, Soup, Salad, Popcorn, Drumstick } from 'lucide-react';
+import { Coffee, Monitor, ChefHat, ReceiptText, Settings, LogOut, Search, Plus, Minus, ShoppingBag, Utensils, ArrowRight, Volume2, VolumeX, Maximize, Check, Clock, RotateCcw, Printer, X, Users, ShieldCheck, Ticket, ChevronLeft, ChevronRight, Loader2, Pencil, Archive, Wallet, TrendingUp, TrendingDown, Trash2, Sparkles, Store, CupSoda, CakeSlice, Sandwich, Cookie, Croissant, Donut, Milk, Leaf, Snowflake, GlassWater, Citrus, Soup, Salad, Popcorn, Drumstick, Timer, Ban, Target, Flame, Lightbulb, Megaphone, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { queueNumber } from '@/core/security.mjs';
 
 type User = { id: string; name: string; username: string; role: string; active?: number };
-type Config = { name: string; timezone: string; footer: string };
+type Config = { name: string; timezone: string; footer: string; target_ready_min?: number };
 type Item = { id: string; name: string; price: number; quantity: number };
 type Product = { id: string; name: string; category: string; price: number; active: number };
 type Payment = { id: string; name: string; active: number };
@@ -74,6 +74,13 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
   const [notice, setNotice] = useState('');
   const [board, setBoard] = useState<Board | null>(null);
   const [connected, setConnected] = useState(false);
+  const [nowTick, setNowTick] = useState('');
+  useEffect(() => {
+    const f = () => { try { setNowTick(new Date().toLocaleTimeString('id-ID', { timeZone: config?.timezone || 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' })); } catch { } };
+    f();
+    const t = setInterval(f, 1000);
+    return () => clearInterval(t);
+  }, [config?.timezone]);
   const [products, setProducts] = useState<Product[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [receipt, setReceipt] = useState<Order | null>(null);
@@ -141,7 +148,7 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
     ['dapur', '/dapur', ChefHat, 'Dapur'],
     ['riwayat', '/riwayat', ReceiptText, 'Riwayat'],
     ...(isAdmin ? [['keuangan', '/keuangan', Wallet, 'Keuangan'] as const] : []),
-    ...(isAdmin ? [['pengaturan', '/pengaturan', Settings, 'Pengaturan'] as const] : []),
+    ...((isAdmin || user.role === 'cashier') ? [['pengaturan', '/pengaturan', Settings, 'Pengaturan'] as const] : []),
   ] as const;
   const head = viewTitles[actualView] || viewTitles.kasir;
 
@@ -151,7 +158,7 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
         <header className="topbar">
           <Brand name={config.name} />
           <nav aria-label="Navigasi utama">
-            {navigation.filter(([v]) => isAdmin || user.role === 'cashier' && v !== 'pengaturan' || user.role === 'kitchen' && v === 'dapur').map(([v, href, Icon, label]) => (
+            {navigation.filter(([v]) => isAdmin || user.role === 'cashier' || user.role === 'kitchen' && v === 'dapur').map(([v, href, Icon, label]) => (
               <a key={v} href={href} className={actualView === v ? 'active' : ''}><Icon size={18} />{label}</a>
             ))}
           </nav>
@@ -168,7 +175,7 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
             <h1>{head.title}</h1>
             <p className="muted">{head.sub}</p>
           </div>
-          <div className="connection"><span className={connected ? 'online' : 'offline'} />{connected ? 'Live' : 'Menyambung…'}<small>{board?.day}</small></div>
+          <div className="connection"><span className={connected ? 'online' : 'offline'} />{connected ? 'Live' : 'Menyambung…'}<small>{board?.day}{nowTick ? ` · ${nowTick}` : ''}</small></div>
         </div>
 
         {error && <div className="banner error" role="alert">{error}<button onClick={() => setError('')} aria-label="Tutup pesan"><X size={17} /></button></div>}
@@ -182,18 +189,18 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
         {actualView === 'dapur' && <Kitchen board={board} config={config} user={user} connected={connected} onAction={b => perform('orders/action', b)} onReceipt={setReceipt} />}
         {actualView === 'riwayat' && <History config={config} day={board?.day || ''} onReceipt={setReceipt} />}
         {actualView === 'keuangan' && isAdmin && <Finance config={config} day={board?.day || ''} onSaved={(s) => message(s)} />}
-        {actualView === 'pengaturan' && isAdmin && <SettingsPanel config={config} products={products} payments={payments} onSave={async (path, b) => {
+        {actualView === 'pengaturan' && (isAdmin || user.role === 'cashier') && <SettingsPanel config={config} products={products} payments={payments} limited={!isAdmin} onSave={async (path, b) => {
           const d = await perform(path, b);
           if (path === 'settings') await loadMe();
           if (path === 'products') await loadProducts();
           if (path === 'payments') await loadPayments();
           message('Tersimpan.'); return d;
         }} onLogout={logout} />}
-        <footer className="app-foot"><img src="/logo-temancipta.svg" alt="Temancipta" className="foot-logo" /><span>Oleh Temancipta · untuk kafe & UMKM</span></footer>
+        <footer className="app-foot"><img src="/logo-temancipta.svg" alt="Temancipta" className="foot-logo" /><span>Temancipta · untuk kafe & UMKM</span></footer>
       </div>
       <Dialog open={!!receipt} onOpenChange={open => { if (!open) setReceipt(null); }}>
         <DialogContent className="receipt-dialog no-print">
-          <DialogHeader><DialogTitle>Struk {receipt && queueNumber(receipt.number)}</DialogTitle><DialogDescription>Kertas thermal 80 mm.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Struk {receipt && queueNumber(receipt.number)}</DialogTitle></DialogHeader>
           {receipt && <Receipt order={receipt} config={config} />}
           <Button onClick={() => window.print()}><Printer />Cetak</Button>
         </DialogContent>
@@ -245,8 +252,8 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
                 <label>Kunci setup <span className="muted">(khusus penyedia layanan)</span><Input name="setupKey" type="password" autoComplete="off" /></label>
               </>
             )}
-            <label>Username<Input name="username" required autoComplete="username" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="cth: admin" /></label>
-            <label>Kata sandi<Input name="password" type="password" required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete={boot === 'setup' ? 'new-password' : 'current-password'} placeholder={boot === 'setup' ? 'Minimal 10 karakter' : '••••••••'} /></label>
+            <label>Username<Input name="username" required autoComplete="off" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="" /></label>
+            <label>Kata sandi<Input name="password" type="password" required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete="off" placeholder="" /></label>
             {boot === 'setup' && <div className="switch-row"><Switch id="sample" checked={sample} onCheckedChange={setSample} /><Label htmlFor="sample">Isi contoh menu</Label></div>}
             <Button className="full" disabled={busy}>{busy ? <Loader2 className="spin" /> : null}{boot === 'setup' ? 'Simpan' : 'Masuk'}<ArrowRight /></Button>
           </form>
@@ -449,11 +456,16 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
 
 function Kitchen({ board, config, user, connected, onAction, onReceipt }: { board: Board | null; config: Config; user: User; connected: boolean; onAction: (b: any) => Promise<any>; onReceipt: (o: Order) => void }) {
   const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState('');
   const [cancel, setCancel] = useState<Order | null>(null);
   const [reason, setReason] = useState('');
-  const filtered = board?.orders.filter(o => filter === 'all' || o.status === filter) || [];
+  const targetMin = config.target_ready_min || 10;
+  const elapsed = (o: Order) => Math.max(0, Math.floor(((board?.serverTime || o.created_at) - o.created_at) / 60000));
+  const overCount = board?.orders.filter(o => o.status !== 'ready' && elapsed(o) > targetMin).length || 0;
+  const q = query.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const filtered = board?.orders.filter(o => (filter === 'all' || o.status === filter) && (!q || o.customer.toLowerCase().includes(query.trim().toLowerCase()) || queueNumber(o.number).toLowerCase().replace(/[^a-z0-9]/g, '').includes(q) || String(o.number).includes(q))) || [];
   const pages = Math.max(1, Math.ceil(filtered.length / 12));
   const current = Math.min(page, pages);
   const pending = useRef(new Map<string, string>());
@@ -472,13 +484,19 @@ function Kitchen({ board, config, user, connected, onAction, onReceipt }: { boar
         <Tabs value={filter} onValueChange={v => { setFilter(v); setPage(1); }}>
           <TabsList className="category-tabs">{['all', 'waiting', 'preparing', 'ready'].map(s => <TabsTrigger key={s} value={s}>{s === 'all' ? 'Semua' : statusNames[s]} <span className="tab-count">{board?.orders.filter(o => s === 'all' || o.status === s).length || 0}</span></TabsTrigger>)}</TabsList>
         </Tabs>
+        <div className="search kit-search"><Search size={17} /><Input aria-label="Cari pesanan" placeholder="Cari nama / nomor…" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} />{query && <button className="kit-clear" aria-label="Hapus pencarian" onClick={() => setQuery('')}><X size={15} /></button>}</div>
       </div>
+      {!!overCount && <p className="banner error kit-warn" role="alert"><Clock size={17} /> {overCount} pesanan lewat target {targetMin} mnt — dahulukan yang bertanda merah.</p>}
       <div className="kitchen-grid">
-        {filtered.slice((current - 1) * 12, current * 12).map(o => (
-          <article className={'order-card ' + o.status} key={o.id}>
-            <header><strong>{queueNumber(o.number)}</strong><Status status={o.status} /></header>
+        {filtered.slice((current - 1) * 12, current * 12).map(o => {
+          const mins = elapsed(o);
+          const over = o.status !== 'ready' && mins > targetMin;
+          const soon = !over && o.status !== 'ready' && mins >= Math.ceil(targetMin * 0.7);
+          return (
+          <article className={'order-card ' + o.status + (over ? ' over' : soon ? ' soon' : '')} key={o.id}>
+            <header><strong>{queueNumber(o.number)}</strong>{o.day !== board?.day && <span className="day-chip" title={'Antrean hari ' + o.day}>{o.day.slice(5)}</span>}<span className="kit-tags"><Status status={o.status} />{over && <span className="over-badge">LEWAT +{mins - targetMin} mnt</span>}{soon && <span className="soon-badge">{mins} mnt</span>}</span></header>
             <h2>{o.customer}</h2>
-            <p className="order-meta">{o.mode === 'takeaway' ? 'Bawa pulang' : 'Di sini'} · {time(o.created_at, config.timezone)} · {Math.max(0, Math.floor(((board?.serverTime || o.created_at) - o.created_at) / 60000))} mnt</p>
+            <p className="order-meta">{o.mode === 'takeaway' ? 'Bawa pulang' : 'Di sini'} · {time(o.created_at, config.timezone)} · {mins} mnt</p>
             <ul>{o.items.map(i => <li key={i.id}><b>{i.quantity}×</b><span>{i.name}</span></li>)}</ul>
             {o.note && <p className="order-note">{o.note}</p>}
             <footer>
@@ -491,9 +509,10 @@ function Kitchen({ board, config, user, connected, onAction, onReceipt }: { boar
               </div>
             </footer>
           </article>
-        ))}
+          );
+        })}
       </div>
-      {!filtered.length && <Empty title="Antrean kosong">Pesanan baru muncul otomatis.</Empty>}
+      {!filtered.length && <Empty title={query ? 'Tidak ketemu' : 'Antrean kosong'}>{query ? `Tidak ada "${query}" di filter ini.` : 'Pesanan baru muncul otomatis.'}</Empty>}
       <Pager page={current} pages={pages} onChange={setPage} />
       <Dialog open={!!cancel} onOpenChange={v => { if (!v) setCancel(null); }}>
         <DialogContent>
@@ -513,7 +532,6 @@ function Pager({ page, pages, onChange }: { page: number; pages: number; onChang
 function Receipt({ order: o, config }: { order: Order; config: Config }) {
   return (
     <article className="receipt">
-      <img src="/logo-temancipta.svg" alt="Temancipta" className="receipt-logo wide" />
       <h2>{config.name}</h2>
       <p>{o.day} · {time(o.created_at, config.timezone)}</p>
       <div className="receipt-number"><span>ANTREAN</span><strong>{queueNumber(o.number)}</strong><h3>{o.customer}</h3><p>{o.mode === 'takeaway' ? 'BAWA PULANG' : 'DI SINI'}</p></div>
@@ -535,6 +553,16 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
   const [error, setError] = useState('');
   const [form, setForm] = useState({ category: 'bahan', note: '', amount: '', day: day });
   const [busy, setBusy] = useState(false);
+  const [chart, setChart] = useState('bar');
+  const [ai, setAi] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const analyze = async () => {
+    if (!from || !to || aiBusy) return;
+    setAiBusy(true); setAiError('');
+    try { setAi(await api(`insights?from=${from}&to=${to}`)); }
+    catch (e) { setAiError((e as Error).message); } finally { setAiBusy(false); }
+  };
   useEffect(() => { if (day) { setFrom(f => f || day); setTo(t => t || day); setForm(f => ({ ...f, day: f.day || day })); } }, [day]);
   const load = useCallback(async () => {
     if (!from || !to) return;
@@ -553,6 +581,8 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
   const totalSpent = Object.values(spentByDay).reduce((a, b) => a + b, 0);
   const profit = totalSales - totalSpent;
   const maxBar = Math.max(1, ...days.map(d => Math.max(salesByDay[d] || 0, spentByDay[d] || 0)));
+  const shortRp = (n: number) => n >= 1000000 ? `Rp${(n / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 })}jt` : n >= 1000 ? `Rp${Math.round(n / 1000)}rb` : money(n);
+  const catIcon: Record<string, any> = { bahan: ShoppingBag, operasional: Store, gaji: Users, lainnya: Archive };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -586,50 +616,152 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
         <div className={'stat ' + (profit >= 0 ? 'good' : 'bad')}><span><Wallet size={19} />Laba</span><strong>{money(profit)}</strong><small>Masuk − keluar</small></div>
       </div>
       <div className="finance-grid">
-        <div className="panel">
-          <h2>Grafik harian</h2>
-          {loading ? <p className="muted">Memuat…</p> : !days.length ? <p className="muted">Belum ada data pada rentang ini.</p> : (
-            <div className="bars">
-              {days.map(d => (
-                <div className="bar-row" key={d}>
-                  <span>{d.slice(5)}</span>
-                  <div className="bar-track">
-                    <div className="bar in" style={{ width: `${Math.max(2, ((salesByDay[d] || 0) / maxBar) * 100)}%` }} />
-                    <div className="bar out" style={{ width: `${Math.max(2, ((spentByDay[d] || 0) / maxBar) * 100)}%` }} />
-                  </div>
-                  <b className={((salesByDay[d] || 0) - (spentByDay[d] || 0)) >= 0 ? 'pos' : 'neg'}>{money((salesByDay[d] || 0) - (spentByDay[d] || 0))}</b>
-                </div>
-              ))}
-              <p className="legend"><i className="in" />Masuk<i className="out" />Keluar</p>
+        <div className="panel fin-chart">
+          <div className="section-top"><h2><TrendingUp size={17} /> Grafik</h2>
+            <Tabs value={chart} onValueChange={setChart}><TabsList className="category-tabs chart-tabs"><TabsTrigger value="bar">Batang</TabsTrigger><TabsTrigger value="pie">Donat</TabsTrigger><TabsTrigger value="line">Tren</TabsTrigger></TabsList></Tabs>
+          </div>
+          {loading ? <div className="ai-skel" aria-label="Memuat grafik"><div /><div /><div /></div> : !days.length ? <div className="ai-empty"><span className="ai-spark big"><TrendingUp size={20} /></span><p><strong>Belum ada data.</strong></p><p className="muted">Ubah rentang tanggal atau catat penjualan & pengeluaran.</p></div> : chart === 'pie' ? (
+            <div className="donut-wrap">
+              <div className="pie donut" style={{ background: `conic-gradient(#12b76a 0 ${(totalSales + totalSpent ? totalSales / (totalSales + totalSpent) * 100 : 0)}%, #f43f5e 0 100%)` }}><div className="pie-hole"><strong>{money(profit)}</strong><small>laba bersih</small></div></div>
+              <div className="donut-legend">
+                <div className="dl-row"><i className="in" /><div><small>Masuk</small><strong>{money(totalSales)}</strong></div><b>{totalSales + totalSpent ? Math.round(totalSales / (totalSales + totalSpent) * 100) : 0}%</b></div>
+                <div className="dl-row"><i className="out" /><div><small>Keluar</small><strong>{money(totalSpent)}</strong></div><b>{totalSales + totalSpent ? Math.round(totalSpent / (totalSales + totalSpent) * 100) : 0}%</b></div>
+              </div>
+            </div>
+          ) : chart === 'line' ? (
+            <div className="trend-wrap">
+              {days.length < 2 ? (() => {
+                const d = days[0], s = salesByDay[d] || 0, o = spentByDay[d] || 0, net = s - o;
+                return <div className="trend-single">
+                  <div><small>Masuk</small><strong className="pos">{money(s)}</strong></div>
+                  <div><small>Keluar</small><strong>{money(o)}</strong></div>
+                  <div><small>Laba {d}</small><strong className={net >= 0 ? 'pos' : 'neg'}>{money(net)}</strong></div>
+                  <p className="muted">Pilih rentang ≥ 2 hari (mis. 7 hari) untuk melihat garis naik-turun.</p>
+                </div>;
+              })() : (() => {
+                const nets = days.map(d => (salesByDay[d] || 0) - (spentByDay[d] || 0));
+                const lo = Math.min(0, ...nets), hi = Math.max(0, ...nets), span = Math.max(1, hi - lo);
+                const W = 340, H = 150, P = 14;
+                const px = (i: number) => days.length < 2 ? W / 2 : P + (i / (days.length - 1)) * (W - P * 2);
+                const py = (v: number) => 12 + (1 - (v - lo) / span) * (H - 30);
+                const pts = nets.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+                const area = `M${px(0).toFixed(1)},${py(0).toFixed(1)} L` + nets.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' L') + ` L${px(nets.length - 1).toFixed(1)},${py(0).toFixed(1)} Z`;
+                const best = nets.indexOf(Math.max(...nets)), worst = nets.indexOf(Math.min(...nets));
+                return (<>
+                  <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Tren laba harian naik turun">
+                    <defs><linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#9a4a1e" stopOpacity=".35" /><stop offset="1" stopColor="#9a4a1e" stopOpacity="0" /></linearGradient></defs>
+                    {[0.25, 0.5, 0.75].map(f => <line key={f} x1={P} x2={W - P} y1={H * f} y2={H * f} stroke="#eadfd1" strokeWidth="1" />)}
+                    <line x1={P} x2={W - P} y1={py(0)} y2={py(0)} stroke="#c9b69c" strokeWidth="1.2" strokeDasharray="5 4" />
+                    <path d={area} fill="url(#trendFill)" />
+                    <polyline points={pts} fill="none" stroke="#9a4a1e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    {nets.map((v, i) => <circle key={days[i]} cx={px(i)} cy={py(v)} r={i === best || i === worst ? 6 : 4.5} fill={v >= 0 ? '#12b76a' : '#d92d20'} stroke="#fff" strokeWidth="2"><title>{days[i]}: {money(v)}</title></circle>)}
+                  </svg>
+                  <div className="trend-days">{days.map((d, i) => <span key={d} className={nets[i] >= 0 ? 'pos' : 'neg'} title={`${d}: ${money(nets[i])}`}>{d.slice(5)}</span>)}</div>
+                  <div className="trend-meta"><span className="pos">▲ {shortRp(Math.max(...nets))} · {days[best]?.slice(5)}</span><span className="neg">▼ {shortRp(Math.min(...nets))} · {days[worst]?.slice(5)}</span></div>
+                </>);
+              })()}
+            </div>
+          ) : (
+            <div className="vbars-wrap">
+              <div className="vbars">
+                {days.map(d => {
+                  const s = salesByDay[d] || 0, o = spentByDay[d] || 0, net = s - o;
+                  return (
+                    <div className="vbar-col" key={d} title={`${d}: masuk ${money(s)}, keluar ${money(o)}, laba ${money(net)}`}>
+                      <div className="vbar-pair">
+                        <div className="vbar in" style={{ height: `${Math.max(3, (s / maxBar) * 100)}%` }} />
+                        <div className="vbar out" style={{ height: `${Math.max(3, (o / maxBar) * 100)}%` }} />
+                      </div>
+                      <span className={net >= 0 ? 'pos' : 'neg'}>{d.slice(5)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="legend"><i className="in" />Masuk<i className="out" />Keluar<i className="net" />Laba = selisih</p>
+              <div className="net-strip">{days.map(d => { const net = (salesByDay[d] || 0) - (spentByDay[d] || 0); return <b key={d} className={net >= 0 ? 'pos' : 'neg'} title={`${d}: ${money(net)}`}>{shortRp(net)}</b>; })}</div>
             </div>
           )}
           <h2 className="mt">Keluar per kategori</h2>
-          <div className="cat-rows">
-            {Object.entries(expenseNames).map(([k, label]) => (
-              <div key={k}><span>{label}</span><div className="bar-track"><div className="bar out" style={{ width: `${totalSpent ? Math.max(2, (spentByCat[k] / totalSpent) * 100) : 0}%` }} /></div><b>{money(spentByCat[k])}</b></div>
-            ))}
+          <div className="cat-rows fin-cats">
+            {Object.entries(expenseNames).map(([k, label]) => {
+              const Icon = catIcon[k] || Archive;
+              const pct = totalSpent ? Math.round((spentByCat[k] / totalSpent) * 100) : 0;
+              return (
+                <div key={k} className="fin-cat"><span className="cat-ico"><Icon size={15} /></span><span className="cat-label">{label}<small>{pct}%</small></span><div className="bar-track"><div className="bar out" style={{ width: `${totalSpent ? Math.max(3, (spentByCat[k] / totalSpent) * 100) : 0}%` }} /></div><b>{money(spentByCat[k])}</b></div>
+              );
+            })}
           </div>
         </div>
-        <div className="panel">
-          <h2>Catat pengeluaran</h2>
+        <div className="panel fin-expense">
+          <h2 className="fin-title"><Wallet size={16} /> Catat pengeluaran</h2>
           <form className="expense-form" onSubmit={save}>
             <label>Tanggal<Input type="date" value={form.day} onChange={e => setForm({ ...form, day: e.target.value })} required /></label>
             <label>Kategori<SelectField label="Kategori" value={form.category} onChange={v => setForm({ ...form, category: v })} options={Object.entries(expenseNames) as [string, string][]} /></label>
             <label>Jumlah (Rp)<Input type="number" min={1} max={2000000000} required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="cth: 150000" /></label>
             <label>Keterangan<Input maxLength={120} value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="cth: Susu 5L" /></label>
-            <Button disabled={busy} className="full">{busy ? <Loader2 className="spin" /> : <Plus />}Simpan</Button>
+            <Button disabled={busy} className="full fin-save">{busy ? <Loader2 className="spin" /> : <Plus />}Simpan</Button>
           </form>
-          <h2 className="mt">Terakhir dicatat</h2>
+          <h2 className="mt fin-title"><ReceiptText size={16} /> Terakhir dicatat</h2>
           <div className="expense-list">
-            {(data?.expenses || []).slice(0, 30).map((x: Expense) => (
-              <div className="expense-row" key={x.id}>
-                <div><strong>{money(x.amount)}</strong><small>{x.day} · {expenseNames[x.category]}{x.note && x.note !== x.category ? ` · ${x.note}` : ''}</small></div>
-                <Button variant="ghost" size="icon" aria-label="Hapus" onClick={() => remove(x.id)}><Trash2 size={16} /></Button>
-              </div>
-            ))}
-            {!(data?.expenses || []).length && !loading && <p className="muted">Belum ada pengeluaran.</p>}
+            {(data?.expenses || []).slice(0, 30).map((x: Expense, i: number) => {
+              const Icon = catIcon[x.category] || Archive;
+              return (
+                <div className="expense-row" key={x.id} style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}>
+                  <span className="exp-ico"><Icon size={15} /></span>
+                  <div><strong>{money(x.amount)}</strong><small>{x.day} · {expenseNames[x.category]}{x.note && x.note !== x.category ? ` · ${x.note}` : ''}{x.author ? ` · ${x.author}` : ''}</small></div>
+                  <Button variant="ghost" size="icon" aria-label="Hapus" onClick={() => remove(x.id)}><Trash2 size={16} /></Button>
+                </div>
+              );
+            })}
+            {!(data?.expenses || []).length && !loading && <div className="ai-empty"><p className="muted">Belum ada pengeluaran.</p></div>}
           </div>
         </div>
+      </div>
+      <div className="panel mt ai-panel">
+        <div className="section-top ai-head"><h2><span className="ai-spark"><Sparkles size={17} /></span> Analisa AI<span className="ai-sub">tren · menu · kecepatan · saran</span></h2><Button variant="outline" size="sm" className={aiBusy ? 'ai-btn busy' : 'ai-btn'} onClick={analyze} disabled={aiBusy}>{aiBusy ? <Loader2 className="spin" size={15} /> : <Sparkles size={15} />}{aiBusy ? 'Menganalisa…' : 'Analisa periode ini'}</Button></div>
+        {aiError && <p className="banner error">{aiError}</p>}
+        {aiBusy && !ai && <div className="ai-skel" aria-label="Memuat analisa"><div /><div /><div /><div /><div /></div>}
+        {ai ? (<>
+          <div className="ai-kpis">
+            <div className="ai-kpi k-andalan"><span className="k-ico"><Trophy size={16} /></span><div><small>Andalan</small><strong>{ai.topItems?.[0] ? `${ai.topItems[0].name} · ${ai.topItems[0].qty}x` : '–'}</strong></div></div>
+            <div className="ai-kpi k-lambat"><span className="k-ico"><Timer size={16} /></span><div><small>Paling lambat</small><strong>{ai.slowMenu?.[0] ? `${ai.slowMenu[0].name} · ${fmtDur(ai.slowMenu[0].avgWait)}` : '–'}</strong></div></div>
+            <div className="ai-kpi k-target"><span className="k-ico"><Target size={16} /></span><div><small>Target {ai.targetMin} mnt</small><strong>{ai.nReady ? `${ai.pctOnTarget}% tercapai (${ai.nOnTarget}/${ai.nReady})` : 'Belum terukur'}</strong></div></div>
+            <div className="ai-kpi k-mati"><span className="k-ico"><Ban size={16} /></span><div><small>Menu mati</small><strong>{ai.deadMenu?.length || 0} item · 0 laku</strong></div></div>
+          </div>
+          <div className="ai-lines">{ai.narrative.split('\n').filter(Boolean).slice(0, 5).map((line: string, i: number) => {
+            const meta = [
+              { icon: TrendingUp, cls: 'tren', tag: 'Tren' },
+              { icon: Flame, cls: 'menu', tag: 'Menu' },
+              { icon: Timer, cls: 'speed', tag: 'Kecepatan' },
+              { icon: Wallet, cls: 'pay', tag: 'Bayar' },
+              { icon: Lightbulb, cls: 'tip', tag: 'Saran' },
+            ][Math.min(i, 4)];
+            const Icon = meta.icon;
+            return <p key={i} className={'ai-line ' + meta.cls} style={{ animationDelay: `${i * 0.07}s` }}><span className="ai-ico"><Icon size={15} /></span><span className="ai-body"><em>{i + 1} · {meta.tag}</em><span>{line.replace(/^\d+\.\s*/, '')}</span></span></p>;
+          })}</div>
+          <p className="ai-src"><span className={'ai-badge ' + (ai.source === 'ai' ? 'cloud' : '')}>{ai.source === 'ai' ? 'AI' : 'Aturan'}</span> <span className="muted">{ai.from}–{ai.to}{ai.nReady ? ` · rata ${fmtDur(ai.avgReady)} · tipikal ${fmtDur(ai.medianReady)} (${ai.nOnTarget}/${ai.nReady} on target)` : ''}</span></p>
+          <div className="ai-grid">
+            {!!ai.topItems?.length && <div className="ai-card"><h3><Trophy size={15} /> Menu laris</h3><div className="rank-list">{(() => { const mx = Math.max(1, ...ai.topItems.map((t: any) => t.qty)); return ai.topItems.map((t: any, i: number) => <div key={t.name} className="rank-row" style={{ animationDelay: `${i * 0.05}s` }}>
+              <span className={'rank r' + Math.min(i + 1, 3)}>{i + 1}</span>
+              <div className="rank-main"><strong>{t.name}</strong><div className="qty-bar"><i style={{ width: `${Math.max(4, (t.qty / mx) * 100)}%` }} /></div></div>
+              <span className="rank-qty">{t.qty}x</span><b>{money(t.revenue)}</b>
+            </div>); })()}</div></div>}
+            {!!ai.slowMenu?.length && <div className="ai-card"><h3><Timer size={15} /> Menu paling lambat</h3><p className="muted sm">Rata-rata pesan→siap per menu. Target {ai.targetMin} mnt.</p><div className="slow-list">{(() => { const mx = Math.max(1, ...ai.slowMenu.map((s: any) => s.avgWait)); return ai.slowMenu.map((s: any, i: number) => {
+              const over = ai.targetMin && s.avgWait > ai.targetMin * 60000;
+              return <div className={'slow-row' + (i === 0 ? ' worst' : '')} key={s.name} style={{ animationDelay: `${i * 0.05}s` }}>
+                <div className="slow-main"><strong>{s.name}</strong><div className="slow-bar"><i style={{ width: `${Math.max(4, (s.avgWait / mx) * 100)}%` }} /></div><small>{s.n}x pesanan · terlama {fmtDur(s.maxWait)}</small></div>
+                <b>{fmtDur(s.avgWait)}</b>
+                {i === 0 ? <span className="chip warn">paling lambat</span> : over ? <span className="chip">di atas target</span> : <span className="chip ok">aman</span>}
+              </div>;
+            }); })()}</div></div>}
+          </div>
+          {!!ai.deadMenu?.length && <div className="ai-card mt"><h3><Ban size={15} /> Menu mati (0 laku)</h3><p className="muted">Saran promo untuk yang masih layak; coret jika stok/menu sudah terlalu banyak.</p><div className="dead-chips">{ai.deadMenu.map((d: any, i: number) => {
+            const name = typeof d === 'string' ? d : d.name;
+            const saran = typeof d === 'string' ? 'promo' : d.saran;
+            return <span key={name} className={'dead-chip ' + saran} style={{ animationDelay: `${i * 0.04}s` }}>{saran === 'promo' ? <Megaphone size={13} /> : <Trash2 size={13} />}{name}<em>{saran}</em></span>;
+          })}</div></div>}
+          {!!ai.paymix?.length && <div className="ai-card mt"><h3><Wallet size={15} /> Metode bayar</h3><div className="pay-rows">{(() => { const tot = Math.max(1, ai.paymix.reduce((a: number, x: any) => a + x.n, 0)); const mx = Math.max(1, ...ai.paymix.map((x: any) => x.n)); return ai.paymix.map((p: any, i: number) => <div key={p.payment} className="pay-row" style={{ animationDelay: `${i * 0.06}s` }}><span>{p.payment}</span><div className="bar-track pay"><div className={'bar pay-' + (i % 4)} style={{ width: `${Math.max(3, (p.n / mx) * 100)}%` }} /></div><b>{p.n}x · {Math.round(p.n / tot * 100)}%</b></div>); })()}</div></div>}
+        </>) : !aiBusy ? (<div className="ai-empty"><span className="ai-spark big"><Sparkles size={20} /></span><p><strong>Belum ada analisa.</strong></p><p className="muted">Tren menu, kecepatan vs target {config.target_ready_min || 10} mnt, menu mati, dan 3 saran konkret untuk rentang tanggal di atas.</p></div>) : null}
       </div>
     </section>
   );
@@ -641,6 +773,7 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   const [announcement, setAnnouncement] = useState<any>(null);
   const [clock, setClock] = useState('');
   const [rotation, setRotation] = useState(0);
+  useEffect(() => { fetch('/promo/list.json', { cache: 'no-store' }).then(r => r.json()).then(d => { if (Array.isArray(d)) setPromos(d.filter(x => typeof x === 'string').slice(0, 12)); }).catch(() => { }); }, []);
   const [eventConnected, setEventConnected] = useState(true);
   const latestBoard = useRef(board);
   const cursor = useRef<number | null>(null);
@@ -649,6 +782,7 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   const speaking = useRef(false);
   const utterance = useRef<SpeechSynthesisUtterance | null>(null);
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepAlive = useRef<ReturnType<typeof setInterval> | null>(null);
   latestBoard.current = board;
   const drain = useCallback(() => {
     if (speaking.current || !sound.current) return;
@@ -658,16 +792,22 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
     if (!ev) return;
     speaking.current = true;
     setAnnouncement(ev);
-    const u = new SpeechSynthesisUtterance(`Nomor antrean A ${Number(ev.number)}, atas nama ${ev.customer}. Pesanan sudah siap. Silakan ambil di konter.`);
+    const u = new SpeechSynthesisUtterance(`Nomor antrean, A ${Number(ev.number)}. ${ev.customer}. Silakan ambil di konter.`);
     u.lang = 'id-ID';
-    u.rate = 0.9;
-    const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('id'));
+    u.rate = 0.82;
+    u.pitch = 1.02;
+    const voices = speechSynthesis.getVoices();
+    const pick = (re: RegExp) => voices.filter(v => re.test(v.lang) || re.test(v.name));
+    const voice = pick(/Andika|Damayanti|Gadis|Ardi|Indones/i)[0] || pick(/^id/i)[0] || pick(/ms-MY|ms_/i)[0] || pick(/id/i)[0];
     if (voice) u.voice = voice;
-    const done = () => { if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; speaking.current = false; utterance.current = null; setTimeout(() => drain(), 700); };
+    const done = () => { if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; if (keepAlive.current) clearInterval(keepAlive.current); keepAlive.current = null; speaking.current = false; utterance.current = null; setTimeout(() => drain(), 700); };
     u.onend = done;
     u.onerror = () => { if (!sound.current) { done(); return; } setAudioError('Suara gagal. Aktifkan ulang.'); sound.current = false; setEnabled(false); queue.current = []; done(); };
     utterance.current = u;
-    speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+    setTimeout(() => { if (utterance.current === u && sound.current) speechSynthesis.speak(u); }, 120);
+    if (keepAlive.current) clearInterval(keepAlive.current);
+    keepAlive.current = setInterval(() => { try { if (speaking.current && utterance.current) speechSynthesis.resume(); } catch { } }, 4000);
     watchdog.current = setTimeout(() => { sound.current = false; setEnabled(false); setAudioError('Suara berhenti. Aktifkan ulang.'); queue.current = []; speechSynthesis.cancel(); speaking.current = false; }, 25000);
   }, []);
   useEffect(() => {
@@ -684,11 +824,18 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
         }
         drain();
       } catch { setEventConnected(false); }
-      if (alive) t = setTimeout(poll, 5000);
+      if (alive) t = setTimeout(poll, 3000);
     };
     poll();
-    return () => { alive = false; clearTimeout(t); sound.current = false; queue.current = []; if (watchdog.current) clearTimeout(watchdog.current); if ('speechSynthesis' in window) speechSynthesis.cancel(); };
+    return () => { alive = false; clearTimeout(t); sound.current = false; queue.current = []; if (watchdog.current) clearTimeout(watchdog.current); if (keepAlive.current) clearInterval(keepAlive.current); if ('speechSynthesis' in window) speechSynthesis.cancel(); };
   }, [drain]);
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const load = () => { try { speechSynthesis.getVoices(); } catch { } };
+    load();
+    try { speechSynthesis.addEventListener('voiceschanged', load); } catch { }
+    return () => { try { speechSynthesis.removeEventListener('voiceschanged', load); } catch { } };
+  }, []);
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString('id-ID', { timeZone: config.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     tick();
@@ -699,20 +846,32 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
     if (!('speechSynthesis' in window)) { setAudioError('Perangkat tidak mendukung suara. Pakai Chrome.'); return; }
     if (enabled) { sound.current = false; setEnabled(false); queue.current = []; if (watchdog.current) clearTimeout(watchdog.current); watchdog.current = null; speechSynthesis.cancel(); speaking.current = false; return; }
     setAudioError('');
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance('Panggilan antrean aktif.');
-    u.lang = 'id-ID';
-    u.onerror = () => { setAudioError('Suara gagal aktif.'); sound.current = false; setEnabled(false); };
-    speechSynthesis.speak(u);
+    let tries = 1;
+    const startTest = () => {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('Panggilan antrean aktif.');
+      u.lang = 'id-ID';
+      u.rate = 0.82;
+      u.pitch = 1.02;
+      const voices = speechSynthesis.getVoices();
+      const voice = voices.filter(v => /Andika|Damayanti|Gadis|Ardi|Indones/i.test(v.lang) || /^id/i.test(v.lang))[0] || voices.find(v => v.lang.startsWith('id'));
+      if (voice) u.voice = voice;
+      u.onerror = () => {
+        if (tries-- > 0) { setTimeout(startTest, 500); return; }
+        setAudioError('Suara gagal aktif.'); sound.current = false; setEnabled(false);
+      };
+      setTimeout(() => speechSynthesis.speak(u), 150);
+    };
+    startTest();
     sound.current = true;
     setEnabled(true);
   };
   const ready = board?.orders.filter(o => o.status === 'ready') || [];
   const waiting = board?.orders.filter(o => o.status !== 'ready') || [];
   const called = ready.find(o => o.id === announcement?.order_id) || ready.at(-1);
-  const others = ready.filter(o => o.id !== called?.id);
-  const pages = Math.max(1, Math.ceil(waiting.length / 12));
-  const rp = Math.max(1, Math.ceil(others.length / 4));
+  const others = ready.filter(o => o.id !== called?.id).sort((a, b) => a.number - b.number);
+  const pages = Math.max(1, Math.ceil(waiting.length / 4));
+  const rp = Math.max(1, Math.ceil(others.length / 8));
   return (
     <main className="display">
       <header className="display-header">
@@ -724,18 +883,19 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
       <div className="display-main">
         <section className="now-calling">
           <p className="eyebrow"><Volume2 size={20} /> {called ? 'SIAP DIAMBIL' : 'MENUNGGU'}</p>
-          <div key={called?.id} className="call-number"><strong>{called ? queueNumber(called.number) : '—'}</strong><h1>{called?.customer || 'Selamat datang'}</h1></div>
+          <div key={called?.id} className="call-number"><strong>{called ? queueNumber(called.number) : '—'}</strong><h1>{called?.customer || 'Selamat datang'}</h1>{called && called.day !== board?.day && <p className="call-day">Antrean {called.day}</p>}</div>
           <p className="pickup-instruction">{called ? 'Ambil di konter.' : 'Nomor siap tampil di sini.'}</p>
-          <div className="ready-strip">{others.slice((rotation % rp) * 4, (rotation % rp) * 4 + 4).map(o => <div key={o.id}><strong>{queueNumber(o.number)}</strong><span>{o.customer}</span></div>)}</div>
+          <div className="ready-strip">{others.slice((rotation % rp) * 8, (rotation % rp) * 8 + 8).map(o => <div key={o.id} className="strip-card"><strong>{queueNumber(o.number)}</strong><span>{o.customer}{o.day !== board?.day ? ` · ${o.day.slice(5)}` : ''}</span></div>)}</div>
+          {!!others.length && <p className="strip-title">Menunggu diambil ({others.length})</p>}
         </section>
         <section className="preparing-display">
           <div className="display-section-title"><h2><ChefHat size={24} /> Disiapkan</h2><span>{waiting.length}</span></div>
-          <div className="display-queue">{waiting.slice((rotation % pages) * 12, (rotation % pages) * 12 + 12).map(o => <div key={o.id} className={'dq-' + o.status}><strong>{queueNumber(o.number)}</strong><span>{o.customer}</span><small>{statusNames[o.status]}</small></div>)}</div>
+          <div className="display-queue">{waiting.slice((rotation % pages) * 4, (rotation % pages) * 4 + 4).map(o => <div key={o.id} className={'dq-' + o.status}><strong>{queueNumber(o.number)}</strong><span>{o.customer}</span><small>{statusNames[o.status]}{o.day !== board?.day ? ` · ${o.day.slice(5)}` : ''}</small></div>)}</div>
           {!waiting.length && <div className="display-empty"><Coffee size={44} /><p>Kosong.</p></div>}
         </section>
       </div>
       <footer className="display-footer">
-        <span>{config.footer}</span>
+        <div className="marquee"><div className="marquee-inner"><span>{config.footer}</span><span>{config.footer}</span></div></div>
         <div>
           <Button variant="ghost" onClick={toggleSound}>{enabled ? <Volume2 /> : <VolumeX />}{enabled ? 'Suara on' : 'Suara'}</Button>
           <Button variant="ghost" aria-label="Layar penuh" onClick={async () => {
@@ -766,34 +926,80 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
     }, 250);
     return () => { alive = false; clearTimeout(t); };
   }, [date, search, page]);
+  const targetMin = data?.summary.targetMin || config.target_ready_min || 10;
+  const nReady = data?.summary.nReady || 0;
+  const pctOn = nReady ? Math.round((data.summary.nOnTarget || 0) / nReady * 100) : 0;
+  const maxWait = Math.max(1, ...(data?.summary.slowest || []).map((s: any) => s.wait || 0), ...(data?.summary.perCustomer || []).map((c: any) => c.avgwait || 0));
   return (
-    <section>
+    <section className="history">
       <div className="history-toolbar">
         <label>Tanggal<Input aria-label="Tanggal" type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} /></label>
         <div className="search"><Search size={17} /><Input aria-label="Cari" placeholder="Nama / nomor" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></div>
+        {!!nReady && <div className="hist-target"><Target size={15} /><span>Target ≤ {targetMin} mnt · <b>{pctOn}%</b> tercapai ({data.summary.nOnTarget}/{nReady})</span></div>}
       </div>
       {error && <p className="banner error">{error}</p>}
-      <div className="stats-row">
-        <div className="stat"><span>Pesanan</span><strong>{data?.summary.orders || 0}</strong></div>
-        <div className="stat"><span>Penjualan</span><strong>{money(data?.summary.sales || 0)}</strong></div>
-        <div className="stat"><span>Batal</span><strong>{data?.summary.cancelled || 0}</strong></div>
+      <div className="stats-row hist-stats">
+        <div className="stat"><span><Ticket size={16} />Pesanan</span><strong>{data?.summary.orders || 0}</strong><small>{data?.count || 0} di halaman ini</small></div>
+        <div className="stat good"><span><Wallet size={16} />Penjualan</span><strong>{money(data?.summary.sales || 0)}</strong><small>non-batal</small></div>
+        <div className="stat bad"><span><X size={16} />Batal</span><strong>{data?.summary.cancelled || 0}</strong></div>
+        <div className="stat good"><span><Clock size={16} />Rata siap</span><strong>{fmtDur(data?.summary.avgReady)}</strong><small>tipikal {fmtDur(data?.summary.medianReady)}</small></div>
+        <div className="stat good"><span><Check size={16} />Rata ambil</span><strong>{fmtDur(data?.summary.avgTake)}</strong><small>siap → diambil</small></div>
       </div>
-      <div className="stats-row">
-        <div className="stat good"><span><Clock size={19} />Rata siap</span><strong>{fmtDur(data?.summary.avgReady)}</strong><small>pesan → siap · {data?.summary.nReady || 0} pesanan</small></div>
-        <div className="stat good"><span><Check size={19} />Rata ambil</span><strong>{fmtDur(data?.summary.avgTake)}</strong><small>siap → diambil</small></div>
-      </div>
-      <div className="table-panel">
-        <Table><TableHeader><TableRow>{['Antrean', 'Pelanggan', 'Jam', 'Jenis', 'Total', 'Lama siap', 'Status', ''].map(t => <TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader>
-          <TableBody>{data?.orders.map((o: Order) => <TableRow key={o.id}><TableCell className="mono strong">{queueNumber(o.number)}</TableCell><TableCell>{o.customer}</TableCell><TableCell>{time(o.created_at, config.timezone)}</TableCell><TableCell>{o.mode === 'takeaway' ? 'Bawa pulang' : 'Di sini'}</TableCell><TableCell>{money(o.total)}</TableCell><TableCell>{fmtDur(o.ready_at ? o.ready_at - o.created_at : null)}</TableCell><TableCell><Status status={o.status} /></TableCell><TableCell><Button variant="ghost" size="icon" aria-label={'Struk ' + queueNumber(o.number)} onClick={() => onReceipt(o)}><Printer /></Button></TableCell></TableRow>)}</TableBody></Table>
-        {loading ? <p className="loading-text">Memuat…</p> : !data?.orders.length ? <Empty title="Kosong">Ganti tanggal / kata kunci.</Empty> : null}
+      {(!!data?.summary.perCustomer?.length || !!data?.summary.slowest?.length) && (
+        <div className="hist-split">
+          {!!data?.summary.slowest?.length && (
+            <div className="ai-card hist-card">
+              <h3><Timer size={15} /> 10 terlambat</h3>
+              <p className="muted sm">Lewat target {targetMin} menit, urut paling lama.</p>
+              <div className="slow-list">{data.summary.slowest.map((s: any, i: number) => {
+                const over = s.wait - targetMin * 60000;
+                return <div className={'slow-row' + (over > 0 ? ' worst' : '')} key={s.number} style={{ animationDelay: `${i * 0.04}s` }}>
+                  <span className="hist-num">{queueNumber(s.number)}</span>
+                  <div className="slow-main"><strong>{s.customer}</strong><div className="slow-bar"><i style={{ width: `${Math.max(6, (s.wait / maxWait) * 100)}%` }} /></div></div>
+                  <b>{fmtDur(s.wait)}</b>
+                  {over > 0 ? <span className="chip warn">+{fmtDur(over)}</span> : <span className="chip ok">on target</span>}
+                </div>;
+              })}</div>
+            </div>
+          )}
+          {!!data?.summary.perCustomer?.length && (
+            <div className="ai-card hist-card">
+              <h3><Users size={15} /> Tunggu per pelanggan</h3>
+              <p className="muted sm">Rata-rata pesan→siap, 8 terlama hari ini.</p>
+              <div className="rank-list">{data.summary.perCustomer.map((c: any, i: number) => (
+                <div className="rank-row" key={c.customer} style={{ animationDelay: `${i * 0.04}s` }}>
+                  <span className={'rank r' + Math.min(i + 1, 3)}>{i + 1}</span>
+                  <div className="rank-main"><strong>{c.customer}</strong><div className="qty-bar"><i style={{ width: `${Math.max(6, (c.avgwait / maxWait) * 100)}%` }} /></div><small>{c.n}x · terlama {fmtDur(c.maxwait)}</small></div>
+                  <span className="rank-qty">{fmtDur(c.avgwait)}</span><b>{money(c.spent)}</b>
+                </div>
+              ))}</div>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="hist-list">
+        <div className="section-top"><h2>Pesanan hari ini</h2><span className="muted">{data?.count || 0} catatan</span></div>
+        {loading ? <p className="loading-text">Memuat…</p> : !data?.orders.length ? <Empty title="Kosong">Ganti tanggal / kata kunci.</Empty> : data.orders.map((o: Order, i: number) => {
+          const wait = o.ready_at ? o.ready_at - o.created_at : null;
+          const over = wait != null && wait > targetMin * 60000;
+          return (
+            <article className={'hist-row st-' + o.status + (over ? ' over' : '')} key={o.id} style={{ animationDelay: `${Math.min(i, 12) * 0.03}s` }}>
+              <div className="hist-q"><strong>{queueNumber(o.number)}</strong><small>{time(o.created_at, config.timezone)}</small></div>
+              <div className="hist-who"><strong>{o.customer}</strong><small>{o.mode === 'takeaway' ? 'Bawa pulang' : 'Di sini'}{o.payment ? ` · ${o.payment}` : ''}</small></div>
+              <div className="hist-wait"><span>{fmtDur(wait)}</span><small>{over ? 'lewat target' : wait ? 'siap' : 'belum siap'}</small></div>
+              <div className="hist-tot"><b>{money(o.total)}</b><Status status={o.status} /></div>
+              <Button variant="ghost" size="icon" aria-label={'Struk ' + queueNumber(o.number)} onClick={() => onReceipt(o)}><Printer size={16} /></Button>
+            </article>
+          );
+        })}
       </div>
       <Pager page={page} pages={Math.max(1, Math.ceil((data?.count || 0) / 30))} onChange={setPage} />
     </section>
   );
 }
 
-function SettingsPanel({ config, products, payments, onSave, onLogout }: { config: Config; products: Product[]; payments: Payment[]; onSave: (path: string, b: any) => Promise<any>; onLogout: () => void }) {
-  const [tab, setTab] = useState('cafe');
+function SettingsPanel({ config, products, payments, limited, onSave, onLogout }: { config: Config; products: Product[]; payments: Payment[]; limited?: boolean; onSave: (path: string, b: any) => Promise<any>; onLogout: () => void }) {
+  const [tab, setTab] = useState(limited ? 'menu' : 'cafe');
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
@@ -814,16 +1020,25 @@ function SettingsPanel({ config, products, payments, onSave, onLogout }: { confi
     try { await onSave(path, values); await load(); done?.(); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
+  const sideInfo: Record<string, { title: string; body: string }> = {
+    cafe: { title: 'Kafe & struk', body: 'Nama tampil di kasir, TV, dan struk. Zona waktu terkunci setelah setup agar nomor harian konsisten.' },
+    menu: { title: 'Menu', body: 'Menu nonaktif hilang dari kasir tapi struk lama tidak berubah. Harga baru berlaku untuk pesanan baru.' },
+    pay: { title: 'Bayar', body: 'Bank & kartu dipilih lewat menu Kartu di kasir. Tulis nomor setelah " - ", misal BRI - 1234567890.' },
+    users: { title: 'Petugas', body: 'Satu akun per orang. Akun hilang? Nonaktifkan lalu buat baru. Kasir hanya bisa ubah menu.' },
+    audit: { title: 'Aktivitas', body: 'Jejak 100 aksi terakhir — andalan saat ada selisih kas atau pesanan bermasalah.' },
+    password: { title: 'Sandi', body: 'Minimal 10 karakter. Setelah ganti, semua sesi keluar dan harus masuk ulang.' },
+  };
   return (
     <section>
+      <div className="settings-grid">
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="category-tabs">
-          <TabsTrigger value="cafe"><Store size={16} />Kafe</TabsTrigger>
+          {!limited && <TabsTrigger value="cafe"><Store size={16} />Kafe</TabsTrigger>}
           <TabsTrigger value="menu"><Coffee size={16} />Menu</TabsTrigger>
-          <TabsTrigger value="pay"><Wallet size={16} />Bayar</TabsTrigger>
-          <TabsTrigger value="users"><Users size={16} />Petugas</TabsTrigger>
-          <TabsTrigger value="audit"><Archive size={16} />Aktivitas</TabsTrigger>
-          <TabsTrigger value="password"><ShieldCheck size={16} />Sandi</TabsTrigger>
+          {!limited && <TabsTrigger value="pay"><Wallet size={16} />Bayar</TabsTrigger>}
+          {!limited && <TabsTrigger value="users"><Users size={16} />Petugas</TabsTrigger>}
+          {!limited && <TabsTrigger value="audit"><Archive size={16} />Aktivitas</TabsTrigger>}
+          {!limited && <TabsTrigger value="password"><ShieldCheck size={16} />Sandi</TabsTrigger>}
         </TabsList>
         {error && <p className="banner error">{error}</p>}
         <TabsContent value="cafe">
@@ -831,6 +1046,7 @@ function SettingsPanel({ config, products, payments, onSave, onLogout }: { confi
             <h2>Kafe & struk</h2>
             <label>Nama kafe<Input name="name" defaultValue={config.name} maxLength={80} required /></label>
             <label>Teks struk & TV<Textarea name="footer" defaultValue={config.footer} maxLength={200} /></label>
+            <label>Target pesan → siap (menit)<Input name="target" type="number" min={1} max={180} defaultValue={config.target_ready_min ?? 10} required /></label>
             <div className="info-box"><Clock size={20} /><div><strong>Nomor reset 00.00</strong><p>{config.timezone} · kembali ke A0001 tiap tanggal baru.</p></div></div>
             <Button disabled={busy}>Simpan</Button>
           </form>
@@ -864,6 +1080,18 @@ function SettingsPanel({ config, products, payments, onSave, onLogout }: { confi
           </form>
         </TabsContent>
       </Tabs>
+      <aside key={tab} className="settings-side">
+        <h3>{sideInfo[tab]?.title}</h3>
+        <p>{sideInfo[tab]?.body}</p>
+        <div className="side-stats">
+          {tab === 'cafe' && <span>{config.timezone}</span>}
+          {tab === 'menu' && <><span>{products.filter(p => p.active).length} aktif</span><span>{new Set(products.map(p => p.category)).size} kategori</span></>}
+          {tab === 'pay' && <span>{payments.filter(p => p.active).length} aktif</span>}
+          {tab === 'users' && (['admin', 'cashier', 'kitchen', 'display'] as const).map(r => <span key={r}>{roleNames[r]}: {users.filter(u => u.role === r).length}</span>)}
+          {tab === 'audit' && <span>{audit.length} baris</span>}
+        </div>
+      </aside>
+      </div>
       <Dialog open={!!edit} onOpenChange={v => { if (!v) setEdit(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{edit?.id ? 'Edit menu' : 'Tambah menu'}</DialogTitle><DialogDescription>Struk lama tidak berubah.</DialogDescription></DialogHeader>
