@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>Temancipta — BRD, FRD, Alur Kerja &amp; Skema Data</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  :root { --ink:#1c140e; --muted:#6b5344; --line:#e6d8c8; --brand:#9a4a1e; --paper:#fffaf4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); font: 11.2pt/1.55 "Segoe UI", Calibri, Arial, sans-serif; background: #fff; }
+  h1,h2,h3,h4 { font-family: Georgia, "Times New Roman", serif; color: #2b1d12; page-break-after: avoid; }
+  h1 { font-size: 26pt; letter-spacing: -.02em; margin: 0 0 8px; }
+  h2 { font-size: 16pt; border-bottom: 2px solid var(--brand); padding-bottom: 6px; margin: 28px 0 12px; }
+  h3 { font-size: 12.5pt; margin: 18px 0 8px; }
+  h4 { font-size: 11pt; margin: 14px 0 6px; }
+  p, li { text-align: justify; }
+  .cover { min-height: 240mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; padding: 18mm 8mm 10mm; }
+  .eyebrow { letter-spacing: .18em; text-transform: uppercase; font-size: 9pt; font-weight: 700; color: var(--brand); }
+  .meta { color: var(--muted); font-size: 10pt; }
+  .box { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--brand); padding: 12px 14px; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.6pt; margin: 10px 0 16px; page-break-inside: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  th { background: #f6eee4; text-align: left; color: #5c4030; }
+  tr { page-break-inside: avoid; }
+  code, .mono { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+  .toc a { color: inherit; text-decoration: none; }
+  .toc li { margin: 4px 0; }
+  .small { font-size: 9.5pt; color: var(--muted); }
+  .flow { font-family: Consolas, monospace; white-space: pre-wrap; background: #faf6f0; border: 1px solid var(--line); padding: 10px 12px; font-size: 9pt; line-height: 1.45; }
+  footer.doc { position: running(footer); }
+  .page-foot { margin-top: 24px; font-size: 8.5pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+  ul.tight li { margin: 3px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media print { .noprint { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div>
+    <p class="eyebrow">Dokumen resmi produk · Rahasia untuk klien &amp; mitra</p>
+    <h1>Temancipta</h1>
+    <p style="font-size:16pt;margin:0 0 18px">Sistem Kasir, Dapur, TV Antrean, dan Analisa Operasional Kafe</p>
+    <div class="box">
+      <p style="margin:0"><b>Business Requirements Document (BRD)</b><br/>
+      <b>Functional Requirements Document (FRD)</b><br/>
+      Alur kerja operasional · Fitur unggulan · Skema basis data</p>
+    </div>
+  </div>
+  <table>
+    <tr><th>Versi dokumen</th><td>1.0</td></tr>
+    <tr><th>Tanggal</th><td>15 September 2026</td></tr>
+    <tr><th>Status</th><td>Siap demo klien / pilot 1–10 kafe</td></tr>
+    <tr><th>Produk</th><td>Temancipta (Cloudflare Workers + D1)</td></tr>
+    <tr><th>Demo</th><td>https://app.temancipta.workers.dev (data contoh, bukan operasional kafe)</td></tr>
+    <tr><th>Klasifikasi</th><td>Untuk diserahkan ke calon klien. Harga, kunci setup, dan sandi tidak dicantumkan di dokumen ini.</td></tr>
+  </table>
+  <p class="meta">Dokumen ini menjelaskan <i>apa yang sistem kerjakan</i> dan <i>bagaimana kafe menggunakannya</i>. Bukan kontrak, bukan SLA hosting, dan bukan kode sumber.</p>
+</section>
+
+<h2>Daftar isi</h2>
+<ol class="toc">
+  <li>Ringkasan eksekutif</li>
+  <li>Tujuan bisnis &amp; ruang lingkup (BRD)</li>
+  <li>Pengguna dan peran</li>
+  <li>Alur kerja operasional (workflow)</li>
+  <li>Persyaratan fungsional (FRD) per modul</li>
+  <li>Fitur unggulan (nilai jual vs POS umum)</li>
+  <li>Persyaratan non-fungsional: keamanan, keandalan, pajak</li>
+  <li>Yang tidak termasuk versi ini</li>
+  <li>Arsitektur singkat</li>
+  <li>Skema basis data lengkap</li>
+  <li>API ringkas</li>
+  <li>Skenario uji penerimaan (UAT)</li>
+  <li>Glosarium</li>
+</ol>
+
+<h2>1. Ringkasan eksekutif</h2>
+<p>Temancipta adalah aplikasi web untuk kafe dan usaha makanan-minuman skala UMKM. Satu instalasi = satu kafe = satu basis data terpisah. Petugas tidak mengunduh aplikasi: kasir, dapur, TV antrean, riwayat, dan keuangan dibuka dari peramban.</p>
+<p>Inti produk bukan hanya mencatat uang masuk. Inti produk adalah <b>mengukur pelayanan dari pesan sampai siap</b>, lalu memberi owner angka dan saran yang bisa dieksekusi: menu mana yang lambat, jam berapa dapur kewalahan, hari mana target terlewati, petugas mana yang cepat, menu mana yang tidak laku.</p>
+<div class="box">
+  <b>Janji yang boleh disampaikan ke klien:</b> nomor antrean unik per hari (reset 00.01 zona kafe), struk menyimpan harga saat transaksi, dapur tidak bisa “saling timpa” status, TV memanggil dengan suara, keuangan masuk−keluar, analisa AI berangka (bukan opini kosong), PBJT terpisah dari PPN.
+</div>
+
+<h2>2. Tujuan bisnis &amp; ruang lingkup (BRD)</h2>
+<h3>2.1 Masalah yang diselesaikan</h3>
+<ul>
+  <li>Antrean kertas/nomor manual dobel saat ramai.</li>
+  <li>Dapur dan kasir tidak melihat status yang sama.</li>
+  <li>Owner tidak tahu apakah pelayanan 10 menit tercapai, atau hanya “rasanya lama”.</li>
+  <li>Menu mati dan menu lambat baru ketahuan setelah stok busuk / komplain.</li>
+  <li>Laporan keuangan tercecer di buku dan chat.</li>
+</ul>
+<h3>2.2 Tujuan terukur</h3>
+<table>
+  <tr><th>Tujuan</th><th>Ukuran di sistem</th></tr>
+  <tr><td>Nomor antrean tidak bentrok dalam satu hari</td><td>Indeks unik (hari, nomor); tes 1.250 pesanan bersamaan</td></tr>
+  <tr><td>Waktu pelayanan terukur</td><td>Cap waktu pesan → proses → siap → diambil</td></tr>
+  <tr><td>Owner bisa evaluasi dapur</td><td>% tercapai target makanan/minuman, jam ramai, 10 terlambat</td></tr>
+  <tr><td>Uang masuk vs keluar terbaca</td><td>Omzet non-batal − pengeluaran; grafik; CSV</td></tr>
+  <tr><td>Satu kafe tidak melihat data kafe lain</td><td>1 Worker + 1 D1 per kafe</td></tr>
+</table>
+<h3>2.3 Pemangku kepentingan</h3>
+<table>
+  <tr><th>Pihak</th><th>Kebutuhan</th></tr>
+  <tr><td>Pemilik kafe</td><td>Laba, kecepatan, menu, pajak daerah, ekspor laporan</td></tr>
+  <tr><td>Kasir</td><td>Input cepat, diskon, struk, batal beralasan</td></tr>
+  <tr><td>Dapur</td><td>Kartu jelas, peringatan lewat target, cari nama/nomor</td></tr>
+  <tr><td>Pelanggan (lewat TV)</td><td>Nomor dipanggil, nama, status siap</td></tr>
+  <tr><td>Penyedia Temancipta</td><td>Setup, backup, support, isolasi data</td></tr>
+</table>
+<h3>2.4 Asumsi</h3>
+<ul class="tight">
+  <li>Perangkat terhubung internet. Tidak ada mode offline menulis pesanan.</li>
+  <li>Pembayaran tunai/QRIS/transfer dilakukan di luar gateway; sistem hanya mencatat metode.</li>
+  <li>Printer struk memakai cetak peramban (profil kertas 80 mm).</li>
+  <li>Suara TV memakai mesin suara peramban (Chrome disarankan).</li>
+  <li>Zona waktu dikunci saat setup (WIB / WITA / WIT).</li>
+</ul>
+
+<h2>3. Pengguna dan peran</h2>
+<table>
+  <tr><th>Peran</th><th>Layar</th><th>Boleh</th><th>Tidak boleh</th></tr>
+  <tr><td>Admin</td><td>Semua</td><td>Pesanan, dapur, riwayat, keuangan, menu, metode bayar, petugas, target SLA, PBJT/service, sandi, aktivitas</td><td>—</td></tr>
+  <tr><td>Kasir</td><td>Kasir, dapur, riwayat, menu (terbatas)</td><td>Buat/batal pesanan, aksi dapur, cetak struk, ubah menu</td><td>Keuangan, pengaturan kafe, petugas, metode bayar</td></tr>
+  <tr><td>Dapur</td><td>Dapur</td><td>Proses, siap &amp; panggil, ulangi, diambil, struk, cari</td><td>Buat pesanan, batal, keuangan</td></tr>
+  <tr><td>TV / Display</td><td>/display</td><td>Lihat antrean &amp; panggilan</td><td>Ubah data apa pun</td></tr>
+</table>
+<p class="small">Sesi 12 jam. Nonaktifkan akun = sesi langsung mati. Ganti sandi admin mengeluarkan semua perangkat akun itu. Tombol “Keluar dari semua perangkat” tersedia.</p>
+
+<h2>4. Alur kerja operasional (workflow)</h2>
+<h3>4.1 Buka shift</h3>
+<ol>
+  <li>Kasir masuk di perangkat kasir.</li>
+  <li>Dapur masuk di perangkat dapur (<span class="mono">/dapur</span>).</li>
+  <li>TV masuk akun display, aktifkan suara sekali, layar penuh.</li>
+  <li>Pastikan indikator <b>Live</b>. Jika “Menyambung…”, jangan terima pesanan baru.</li>
+</ol>
+<h3>4.2 Siklus satu pesanan</h3>
+<div class="flow">Pelanggan pesan
+    → Kasir pilih menu (qty, catatan, dine-in/takeaway)
+    → Isi nama panggilan
+    → Diskon (Rp) opsional
+    → Sistem hitung: subtotal − diskon + service% + PBJT%
+    → Kasir terima uang di luar sistem, pilih metode (Tunai / QRIS / Bank)
+    → Simpan  → server beri nomor A0001, A0002, … (unik hari itu)
+    → Struk: snapshot nama+harga saat itu (ubah menu nanti tidak mengubah struk lama)
+    → Dapur: Menunggu → Proses → Siap & panggil
+    → TV: ucapan “Nomor antrean A … [nama]. Silakan ambil di konter.”
+    → Kasir/dapur: Diambil  → status Selesai (hilang dari papan, tetap di riwayat)
+    → Batal hanya waiting/preparing/ready + alasan wajib; refund di luar sistem</div>
+<h3>4.3 Status pesanan</h3>
+<table>
+  <tr><th>Status</th><th>Arti</th><th>Aksi berikutnya</th><th>Cap waktu</th></tr>
+  <tr><td>waiting</td><td>Baru masuk dapur</td><td>Proses</td><td>created_at</td></tr>
+  <tr><td>preparing</td><td>Sedang dibuat</td><td>Siap &amp; panggil</td><td>prepared_at (pertama kali)</td></tr>
+  <tr><td>ready</td><td>Siap diambil, TV memanggil</td><td>Ulangi / Diambil</td><td>ready_at</td></tr>
+  <tr><td>completed</td><td>Sudah diambil</td><td>—</td><td>completed_at</td></tr>
+  <tr><td>cancelled</td><td>Dibatalkan</td><td>—</td><td>cancel_reason</td></tr>
+</table>
+<p>Pindah status memakai <b>versi (optimistic lock)</b>: dua petugas tidak bisa menekan tombol yang sama dan menghasilkan dua panggilan. Panggilan TV memakai ID permintaan unik (boleh diulang tanpa dobel event).</p>
+<h3>4.4 Nomor harian</h3>
+<ul>
+  <li>Format tampilan: A0001 … A1000 … (lebar minimal 4 digit, tidak dibatasi 9999).</li>
+  <li>Reset otomatis pada pergantian <b>hari bisnis zona kafe</b> (bukan jam HP).</li>
+  <li>Pesanan kemarin yang belum selesai tetap tampil di dapur/TV, dengan label tanggal agar tidak dikira nomor hari ini.</li>
+</ul>
+<h3>4.5 Evaluasi owner (setelah ramai / tutup toko)</h3>
+<ol>
+  <li>Riwayat hari itu: KPI pesanan, omzet, batal, rata siap, rata ambil, % target.</li>
+  <li>Jam ramai: kolom jam 08.00, 09.00, … jam tersibuk ditandai; merah = lewat target.</li>
+  <li>10 terlambat + kecepatan per petugas + tunggu per pelanggan.</li>
+  <li>Keuangan: rentang tanggal, grafik batang/donat/tren, catat pengeluaran, laba, CSV.</li>
+  <li>Analisa AI: 5 seksi wajib (tren, menu, kecepatan vs target, bayar, 3 saran). Jika AI gagal, aturan tetap menulis 5 baris yang sama strukturnya.</li>
+</ol>
+
+<h2>5. Persyaratan fungsional (FRD)</h2>
+<p>ID FR-x dipakai saat uji penerimaan. Prioritas: Wajib = harus ada di serah terima; Penting = ada di versi sekarang; Nanti = di luar versi ini.</p>
+
+<h3>5.1 Autentikasi &amp; setup — FR-A</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-A01</td><td>Setup sekali: nama kafe, admin, zona waktu, kunci setup. Tidak bisa diulang.</td><td>Wajib</td></tr>
+  <tr><td>FR-A02</td><td>Login username+sandi. Gagal 8× / 15 menit per IP+username → 429.</td><td>Wajib</td></tr>
+  <tr><td>FR-A03</td><td>Cookie sesi HttpOnly, SameSite=Strict, Secure di HTTPS, 12 jam.</td><td>Wajib</td></tr>
+  <tr><td>FR-A04</td><td>Setiap POST wajib Origin sama + Content-Type JSON (anti CSRF / form silang situs).</td><td>Wajib</td></tr>
+  <tr><td>FR-A05</td><td>Mode demo menampilkan banner; /api/health untuk cek layanan.</td><td>Penting</td></tr>
+  <tr><td>FR-A06</td><td>Peringatan jika halaman masuk dibuka di domain yang tidak dikenali.</td><td>Penting</td></tr>
+  <tr><td>FR-A07</td><td>Keluar dari semua perangkat.</td><td>Penting</td></tr>
+</table>
+
+<h3>5.2 Kasir — FR-K</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-K01</td><td>Pilih 1–50 menu, qty 1–99, tanpa duplikat baris (gabung qty).</td><td>Wajib</td></tr>
+  <tr><td>FR-K02</td><td>Nama pelanggan wajib (nama panggilan TV).</td><td>Wajib</td></tr>
+  <tr><td>FR-K03</td><td>Mode dine-in / takeaway.</td><td>Wajib</td></tr>
+  <tr><td>FR-K04</td><td>Metode bayar dari daftar aktif (Tunai, QRIS, bank kustom).</td><td>Wajib</td></tr>
+  <tr><td>FR-K05</td><td>Diskon Rupiah; service % dan PBJT % dari pengaturan kafe, dihitung server.</td><td>Wajib</td></tr>
+  <tr><td>FR-K06</td><td>Tampilan rincian: Subtotal, Diskon, Service, PBJT, Total.</td><td>Wajib</td></tr>
+  <tr><td>FR-K07</td><td>expectedTotal harus sama dengan hitungan server; jika harga berubah → 409, kasir muat ulang.</td><td>Wajib</td></tr>
+  <tr><td>FR-K08</td><td>Simpan idempoten: UUID + sidik data. Ulang kirim data sama = pesanan yang sama, bukan nomor baru. Ulang dengan data beda = 409.</td><td>Wajib</td></tr>
+  <tr><td>FR-K09</td><td>Foto menu URL https opsional; ikon kategori jika foto gagal.</td><td>Penting</td></tr>
+  <tr><td>FR-K10</td><td>QRIS menampilkan gambar kafe; bank menampilkan nomor rekening.</td><td>Penting</td></tr>
+</table>
+
+<h3>5.3 Dapur — FR-D</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-D01</td><td>Papan pesanan aktif semua tanggal (melewati tengah malam).</td><td>Wajib</td></tr>
+  <tr><td>FR-D02</td><td>Filter Semua / Menunggu / Diproses / Siap + pencarian nama atau nomor.</td><td>Wajib</td></tr>
+  <tr><td>FR-D03</td><td>Peringatan merah jika lewat target (makanan vs minuman terpisah).</td><td>Wajib</td></tr>
+  <tr><td>FR-D04</td><td>Badge “hampir” (≥70% target) dan “LEWAT +X mnt”.</td><td>Penting</td></tr>
+  <tr><td>FR-D05</td><td>Panggil ulang tidak mereset ready_at (cap pertama yang dihitung SLA).</td><td>Wajib</td></tr>
+</table>
+
+<h3>5.4 TV — FR-T</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-T01</td><td>Tampil nomor besar + nama yang sedang dipanggil.</td><td>Wajib</td></tr>
+  <tr><td>FR-T02</td><td>Suara bahasa Indonesia setelah tombol aktif (kebijakan peramban).</td><td>Wajib</td></tr>
+  <tr><td>FR-T03</td><td>Antrean “disiapkan” dan strip “menunggu diambil”, rotasi halaman.</td><td>Wajib</td></tr>
+  <tr><td>FR-T04</td><td>Event panggilan berhalaman 100, kursor monoton, tidak hilang diam-diam.</td><td>Wajib</td></tr>
+</table>
+
+<h3>5.5 Riwayat — FR-R</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-R01</td><td>Cari nama / nomor, 30 baris per halaman, wildcard aman.</td><td>Wajib</td></tr>
+  <tr><td>FR-R02</td><td>KPI: pesanan, penjualan, batal, rata siap, rata ambil, median, % on-target.</td><td>Wajib</td></tr>
+  <tr><td>FR-R03</td><td>Jam ramai, 10 terlambat, per pelanggan, per petugas.</td><td>Wajib</td></tr>
+  <tr><td>FR-R04</td><td>Ekspor CSV hari itu.</td><td>Penting</td></tr>
+  <tr><td>FR-R05</td><td>Cetak ulang struk tanpa membuat pesanan baru.</td><td>Wajib</td></tr>
+</table>
+
+<h3>5.6 Keuangan &amp; AI — FR-F</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-F01</td><td>Rentang tanggal maks 93 hari untuk insights; keuangan admin only.</td><td>Wajib</td></tr>
+  <tr><td>FR-F02</td><td>Grafik batang, donat laba, tren; &gt;14 hari dikelompokkan mingguan.</td><td>Wajib</td></tr>
+  <tr><td>FR-F03</td><td>Pengeluaran kategori bahan / operasional / gaji / lainnya.</td><td>Wajib</td></tr>
+  <tr><td>FR-F04</td><td>Analisa 5 seksi: tren, menu (andalan+lambat+mati), kecepatan vs target, bayar, 3 saran.</td><td>Wajib</td></tr>
+  <tr><td>FR-F05</td><td>AI tidak menyebut nama pelanggan; angka dari data, bukan dikarang. Fallback aturan jika model kosong/gagal.</td><td>Wajib</td></tr>
+  <tr><td>FR-F06</td><td>Menu lambat: rata pesan→siap; sampel &lt;3 ditandai estimasi.</td><td>Penting</td></tr>
+  <tr><td>FR-F07</td><td>Menu mati: aktif tapi 0 laku di rentang, saran promo/coret.</td><td>Wajib</td></tr>
+  <tr><td>FR-F08</td><td>Heatmap % ketercapaian per hari.</td><td>Penting</td></tr>
+  <tr><td>FR-F09</td><td>CSV keuangan (harian + daftar pengeluaran).</td><td>Penting</td></tr>
+</table>
+
+<h3>5.7 Pengaturan — FR-P</h3>
+<table>
+  <tr><th>ID</th><th>Persyaratan</th><th>P</th></tr>
+  <tr><td>FR-P01</td><td>Nama kafe, teks struk/TV, target siap (umum), target makanan, target minuman (1–180 menit).</td><td>Wajib</td></tr>
+  <tr><td>FR-P02</td><td>PBJT 0–10%, service 0–50%.</td><td>Wajib</td></tr>
+  <tr><td>FR-P03</td><td>CRUD menu (nama, kategori, harga, aktif, URL foto).</td><td>Wajib</td></tr>
+  <tr><td>FR-P04</td><td>Metode bayar kustom (contoh: BRI - 123…).</td><td>Wajib</td></tr>
+  <tr><td>FR-P05</td><td>Akun kasir/dapur/TV; nonaktifkan (bukan hapus admin).</td><td>Wajib</td></tr>
+  <tr><td>FR-P06</td><td>Log 100 aktivitas terakhir.</td><td>Penting</td></tr>
+</table>
+
+<h2>6. Fitur unggulan</h2>
+<p>Ini yang disampaikan ke klien jika ditanya “bedanya dengan Luna / POS paket murah”:</p>
+<table>
+  <tr><th>Unggulan</th><th>Apa yang klien dapat</th><th>Bukan klaim ini</th></tr>
+  <tr><td>SLA dapur terukur</td><td>Cap waktu tiap tahap; target makanan ≠ minuman</td><td>Bukan stopwatch waiter per meja</td></tr>
+  <tr><td>Jam ramai</td><td>Rata siap per jam, jam tersibuk, saran “tambah orang jam 19.00”</td><td>Bukan prediksi AI tanpa data</td></tr>
+  <tr><td>Analisa berangka</td><td>5 seksi + fallback aturan; tanpa nama pelanggan</td><td>Bukan LLM bebas mengarang omzet</td></tr>
+  <tr><td>Menu mati / lambat</td><td>0 laku → promo/coret; lambat → SOP dapur</td><td>Bukan stok gudang otomatis</td></tr>
+  <tr><td>Nomor aman ramai</td><td>Alokasi atomik + indeks unik + tes 1.250 concurrent</td><td>Bukan antrean kertas</td></tr>
+  <tr><td>Isolasi kafe</td><td>1 DB fisik per kafe</td><td>Bukan satu database multi-tenant</td></tr>
+  <tr><td>Pajak jujur</td><td>PBJT daerah, bukan PPN 11/12% di struk makan di tempat</td><td>Bukan konsultan pajak</td></tr>
+  <tr><td>TV bersuara</td><td>Panggilan antrian Indonesia</td><td>Bukan studio rekaman; tergantung suara Chrome</td></tr>
+</table>
+
+<h2>7. Non-fungsional</h2>
+<h3>7.1 Keamanan</h3>
+<ul class="tight">
+  <li>Sandi: PBKDF2-SHA256, 100.000 iterasi, garam acak per akun.</li>
+  <li>Token sesi: dua UUID acak; yang disimpan hanya hash SHA-256.</li>
+  <li>SQL berparameter. Teks pelanggan dirender lewat React (bukan HTML mentah).</li>
+  <li>Header API: no-store, nosniff, DENY iframe, referrer same-origin, matikan kamera/mikrofon/lokasi.</li>
+  <li>Login dummy hash jika username tidak ada (anti enumerasi waktu).</li>
+</ul>
+<h3>7.2 Keandalan</h3>
+<ul class="tight">
+  <li>Papan kasir/dapur poll 3 detik; event TV 5 detik (hemat kuota, panggilan tetap berurutan).</li>
+  <li>Klien mengulang otomatis 2× jika jaringan putus atau server 5xx (kecuali login/setup).</li>
+  <li>Tidak ada antrian tulis offline. Data hidup di server, bukan localStorage.</li>
+  <li>Backup: skrip <span class="mono">npm run backup</span> mengekspor D1; klien bayar wajib jadwal harian.</li>
+</ul>
+<h3>7.3 Pajak (informasi produk, bukan nasihat hukum)</h3>
+<p>Menurut DJP / UU HKPD: makanan-minuman yang disajikan restoran/kafe (ada meja/kursi/peralatan) adalah objek <b>PBJT daerah, tarif maksimal 10%</b>, bukan PPN. UMKM di bawah ambang Perda setempat bisa tidak wajib pungut — isi 0. Service charge adalah kebijakan kafe, bukan pajak. Owner menyesuaikan Pengaturan → Kafe.</p>
+<h3>7.4 Performa yang diuji</h3>
+<p>Paket uji otomatis (Node + SQLite kompatibel D1) mencakup zona waktu Indonesia, 1.250 nomor unik, lewat tengah malam, idempotensi, mesin status, peran, throttle login, insights tanpa nama pelanggan, PBJT/diskon. Ini uji kebenaran logika, bukan SLA latensi produksi.</p>
+
+<h2>8. Di luar versi ini</h2>
+<p>Jangan dijanjikan di proposal kecuali ada kontrak pengembangan terpisah:</p>
+<ul class="tight">
+  <li>Stok bahan / resep / HPP otomatis</li>
+  <li>Nomor meja, split bill, void edit item setelah tersimpan</li>
+  <li>Gateway pembayaran (midtrans dll.) — QRIS hanya gambar + catatan metode</li>
+  <li>Printer ESC/POS native (yang ada: cetak peramban 80 mm)</li>
+  <li>Aplikasi Android/iOS toko; mode offline kasir</li>
+  <li>Loyalty, member, voucher berjangka</li>
+  <li>Multi-cabang satu login (modelnya: 1 kafe = 1 instalasi)</li>
+  <li>Upload foto ke server kami (sekarang URL https)</li>
+  <li>Reset sandi staf lewat email; 2FA pengguna akhir (2FA yang wajib: akun Cloudflare penyedia)</li>
+</ul>
+
+<h2>9. Arsitektur singkat</h2>
+<div class="flow">Peramban (Kasir / Dapur / TV / Owner)
+        │  HTTPS same-origin /api/...
+        ▼
+Cloudflare Worker  ←  Workers AI (Llama, opsional)
+        │
+        ▼
+Cloudflare D1 (SQLite)  — satu database per kafe
+        │
+        ▼
+Migrasi Drizzle 0000 … 0005</div>
+<p>Layar React memanggil API. Seluruh aturan bisnis ada di <span class="mono">core/service.mjs</span>. Worker tidak membuat tabel sendiri — hanya migrasi.</p>
+
+<h2>10. Skema basis data lengkap</h2>
+<p>Tipe: SQLite/D1. Uang dalam <b>Rupiah integer</b> (tanpa desimal). Waktu dalam <b>milidetik epoch</b> (integer). Status teks. Satu baris <span class="mono">settings.id = 1</span> per kafe.</p>
+
+<h3>10.1 settings — pengaturan kafe</h3>
+<table>
+  <tr><th>Kolom</th><th>Tipe</th><th>Keterangan</th></tr>
+  <tr><td>id</td><td>integer PK</td><td>Selalu 1</td></tr>
+  <tr><td>name</td><td>text</td><td>Nama kafe (kasir, TV, struk)</td></tr>
+  <tr><td>timezone</td><td>text</td><td>Asia/Jakarta | Asia/Makassar | Asia/Jayapura — dikunci setup</td></tr>
+  <tr><td>footer</td><td>text</td><td>Teks struk &amp; marquee TV</td></tr>
+  <tr><td>target_ready_min</td><td>integer default 10</td><td>Target umum (menit)</td></tr>
+  <tr><td>target_food_min</td><td>integer default 15</td><td>Target jika pesanan mengandung makanan</td></tr>
+  <tr><td>target_drink_min</td><td>integer default 5</td><td>Target minuman murni</td></tr>
+  <tr><td>tax_pct</td><td>integer default 0</td><td>PBJT 0–10</td></tr>
+  <tr><td>service_pct</td><td>integer default 0</td><td>Service 0–50</td></tr>
+</table>
+
+<h3>10.2 users — petugas</h3>
+<table>
+  <tr><th>Kolom</th><th>Tipe</th><th>Keterangan</th></tr>
+  <tr><td>id</td><td>text PK UUID</td><td></td></tr>
+  <tr><td>username</td><td>text unique</td><td>huruf kecil a-z0-9._-</td></tr>
+  <tr><td>name</td><td>text</td><td>Nama tampilan</td></tr>
+  <tr><td>password</td><td>text</td><td>salt:hash PBKDF2</td></tr>
+  <tr><td>role</td><td>text</td><td>admin | cashier | kitchen | display</td></tr>
+  <tr><td>active</td><td>integer default 1</td><td>0 = ditolak masuk, sesi dihapus</td></tr>
+</table>
+
+<h3>10.3 sessions &amp; attempts</h3>
+<table>
+  <tr><th>Tabel</th><th>Kolom</th><th>Keterangan</th></tr>
+  <tr><td>sessions</td><td>token (hash PK), user_id FK, expires</td><td>Hanya hash token</td></tr>
+  <tr><td>attempts</td><td>key, count, until</td><td>Throttle login per IP|username</td></tr>
+</table>
+
+<h3>10.4 products — menu</h3>
+<table>
+  <tr><th>Kolom</th><th>Tipe</th><th>Keterangan</th></tr>
+  <tr><td>id</td><td>text PK</td><td></td></tr>
+  <tr><td>name, category</td><td>text</td><td></td></tr>
+  <tr><td>price</td><td>integer</td><td>Rupiah</td></tr>
+  <tr><td>active</td><td>integer</td><td>Nonaktif hilang dari kasir; struk lama utuh</td></tr>
+  <tr><td>img</td><td>text default ''</td><td>URL http(s) atau kosong</td></tr>
+</table>
+
+<h3>10.5 payments — metode bayar</h3>
+<table>
+  <tr><th>Kolom</th><th>Tipe</th><th>Keterangan</th></tr>
+  <tr><td>id, name unique, active</td><td></td><td>Seed: Tunai, QRIS, Kartu. Nama bank bebas, contoh “BRI - 123”</td></tr>
+</table>
+
+<h3>10.6 orders — pesanan (inti)</h3>
+<table>
+  <tr><th>Kolom</th><th>Tipe</th><th>Keterangan</th></tr>
+  <tr><td>id</td><td>text PK UUID</td><td>ID permintaan kasir (idempoten)</td></tr>
+  <tr><td>day</td><td>text YYYY-MM-DD</td><td>Hari bisnis server</td></tr>
+  <tr><td>number</td><td>integer</td><td>Unik bersama day</td></tr>
+  <tr><td>customer, mode, note, payment, status</td><td>text</td><td>mode: dine-in | takeaway</td></tr>
+  <tr><td>items</td><td>text JSON</td><td>[{id,name,price,quantity}] snapshot</td></tr>
+  <tr><td>total</td><td>integer</td><td>Subtotal − diskon + service + PBJT</td></tr>
+  <tr><td>discount_rp, service_rp, tax_rp</td><td>integer default 0</td><td></td></tr>
+  <tr><td>created_at, updated_at</td><td>integer</td><td>ms</td></tr>
+  <tr><td>created_by</td><td>text</td><td>user id kasir — dasar “kecepatan per petugas”</td></tr>
+  <tr><td>fingerprint</td><td>text</td><td>Hash isi pesanan; tidak dikirim ke klien</td></tr>
+  <tr><td>version</td><td>integer default 1</td><td>Optimistic lock dapur</td></tr>
+  <tr><td>cancel_reason</td><td>text null</td><td>Wajib jika batal</td></tr>
+  <tr><td>prepared_at, ready_at, completed_at</td><td>integer null</td><td>COALESCE: cap pertama menang</td></tr>
+</table>
+<p class="small">Indeks: UNIQUE(day, number); INDEX(status, created_at); INDEX(day, created_at).</p>
+<h4>Rumus uang</h4>
+<div class="flow">subtotal = Σ price × quantity
+diskon    = 0 … subtotal (input kasir)
+service   = round((subtotal − diskon) × service_pct / 100)
+PBJT      = round((subtotal − diskon + service) × tax_pct / 100)
+total     = subtotal − diskon + service + PBJT</div>
+<h4>Rumus SLA</h4>
+<div class="flow">wait = ready_at − created_at   (hanya jika ready_at ≥ created_at)
+pesanan makanan jika salah satu item.id ada di produk kategori
+  makan|roti|kue|snack|food|bakery|cake|pastry|dessert
+target = target_food_min jika makanan, else target_drink_min
+on_target jika wait ≤ target × 60.000 ms</div>
+
+<h3>10.7 events — panggilan TV</h3>
+<table>
+  <tr><th>Kolom</th><th>Keterangan</th></tr>
+  <tr><td>id integer AI PK</td><td>Kursor poll TV</td></tr>
+  <tr><td>request_id unique</td><td>Idempoten siap/recall</td></tr>
+  <tr><td>order_id FK, day, number, customer, created_at</td><td>Salinan untuk TV tanpa join berat</td></tr>
+</table>
+
+<h3>10.8 expenses — pengeluaran</h3>
+<table>
+  <tr><th>Kolom</th><th>Keterangan</th></tr>
+  <tr><td>id, day, category, note, amount, created_at, created_by</td><td>category: bahan | operasional | gaji | lainnya</td></tr>
+</table>
+
+<h3>10.9 audit</h3>
+<table>
+  <tr><th>Kolom</th><th>Keterangan</th></tr>
+  <tr><td>id AI, actor, action, target, created_at</td><td>Contoh action: order.create, order.ready, settings.update, user.access</td></tr>
+</table>
+
+<h3>10.10 Relasi (logika)</h3>
+<div class="flow">settings (1)
+users 1──* sessions
+users 1──* orders.created_by
+users 1──* expenses.created_by
+users 1──* audit.actor
+products  (id tersalin ke orders.items JSON, bukan FK keras)
+orders 1──* events
+payments.name  (dipilih saat create; bukan FK)</div>
+
+<h3>10.11 Migrasi</h3>
+<table>
+  <tr><th>Berkas</th><th>Isi</th></tr>
+  <tr><td>0000</td><td>Tabel inti awal</td></tr>
+  <tr><td>0001–0002</td><td>Penyesuaian operasional</td></tr>
+  <tr><td>0003</td><td>prepared_at, ready_at, completed_at</td></tr>
+  <tr><td>0004</td><td>target_ready_min</td></tr>
+  <tr><td>0005</td><td>target makanan/minuman, tax/service, img, discount/service/tax pada orders</td></tr>
+</table>
+
+<h2>11. API ringkas (untuk teknis klien)</h2>
+<p>Semua di bawah <span class="mono">/api/…</span>, JSON, tanpa cache. Mutasi POST + Origin.</p>
+<table>
+  <tr><th>Metode</th><th>Jalur</th><th>Siapa</th><th>Fungsi</th></tr>
+  <tr><td>GET</td><td>health</td><td>publik</td><td>ok, demo, waktu</td></tr>
+  <tr><td>GET</td><td>bootstrap</td><td>publik</td><td>sudah setup?</td></tr>
+  <tr><td>POST</td><td>setup / login / logout / logout-all / password</td><td>sesuai</td><td>akun</td></tr>
+  <tr><td>GET</td><td>me, board, events, products, payments, history, finance, insights, users, audit</td><td>peran</td><td>baca</td></tr>
+  <tr><td>POST</td><td>orders, orders/action, products, payments, settings, expenses, expenses/delete, users, users/access</td><td>peran</td><td>tulis</td></tr>
+</table>
+
+<h2>12. Uji penerimaan klien (UAT)</h2>
+<ol>
+  <li>Masuk admin, kasir, dapur, TV — masing-masing hanya melihat menunya.</li>
+  <li>Buat pesanan, catat nomor. Refresh kasir, pesan yang sama tidak membuat nomor baru.</li>
+  <li>Ubah harga menu, struk lama tidak berubah.</li>
+  <li>Dua perangkat dapur tekan “Siap” bersamaan: hanya satu yang menang, satu panggilan TV.</li>
+  <li>TV menyebut nomor dan nama.</li>
+  <li>Tunggu &gt; target makanan: kartu dapur merah.</li>
+  <li>Isi PBJT 10% + diskon: rincian kasir dan struk sama dengan kalkulator.</li>
+  <li>Keuangan 7 hari: grafik tidak “melebar tak terbaca”; analisa 5 nomor; tidak ada nama pelanggan di narasi.</li>
+  <li>CSV riwayat terbuka di Excel.</li>
+  <li>Nonaktifkan kasir: HP kasir langsung tidak bisa /api/me.</li>
+</ol>
+
+<h2>13. Glosarium</h2>
+<table>
+  <tr><th>Istilah</th><th>Arti di Temancipta</th></tr>
+  <tr><td>Hari bisnis</td><td>Tanggal menurut zona kafe, dipakai nomor antrean</td></tr>
+  <tr><td>Snapshot</td><td>Nama &amp; harga menu disalin ke JSON pesanan</td></tr>
+  <tr><td>On target</td><td>Waktu pesan→siap ≤ target kategori pesanan</td></tr>
+  <tr><td>Menu mati</td><td>Produk aktif tanpa penjualan di rentang analisa</td></tr>
+  <tr><td>Aturan</td><td>Narasi 5 baris tanpa model AI, tetap terstruktur</td></tr>
+  <tr><td>PBJT</td><td>Pajak daerah makanan/minuman, maks 10%</td></tr>
+  <tr><td>Fingerprint</td><td>Hash isi pesanan untuk deteksi retry beda data</td></tr>
+</table>
+
+<p class="page-foot">Temancipta · Dokumen klien v1.0 · 15 September 2026 · Cetak dari peramban: Ctrl+P → Simpan sebagai PDF · Kertas A4</p>
+<p class="noprint small">File ini: docs/Temancipta-Dokumen-Klien.html — buka di Chrome lalu cetak PDF untuk dibawa ke rapat.</p>
+</body>
+</html>
