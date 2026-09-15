@@ -959,11 +959,9 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
               <p className="muted sm">Lewat target {targetMin} menit, urut paling lama.</p>
               <div className="slow-list">{data.summary.slowest.map((s: any, i: number) => {
                 const over = s.wait - targetMin * 60000;
-                return <div className={'slow-row' + (over > 0 ? ' worst' : '')} key={s.number} style={{ animationDelay: `${i * 0.04}s` }}>
-                  <span className="hist-num">{queueNumber(s.number)}</span>
-                  <div className="slow-main"><strong>{s.customer}</strong><div className="slow-bar"><i style={{ width: `${Math.max(6, (s.wait / maxWait) * 100)}%` }} /></div></div>
-                  <b>{fmtDur(s.wait)}</b>
-                  {over > 0 ? <span className="chip warn">+{fmtDur(over)}</span> : <span className="chip ok">on target</span>}
+                return <div className={'late-row' + (over > 0 ? ' worst' : '')} key={s.number} style={{ animationDelay: `${i * 0.04}s` }}>
+                  <div className="late-top"><span className="hist-num">{queueNumber(s.number)}</span><strong>{s.customer}</strong><span className="late-wait">{fmtDur(s.wait)}</span>{over > 0 ? <span className="chip warn">+{fmtDur(over)}</span> : <span className="chip ok">on target</span>}</div>
+                  <div className="slow-bar"><i style={{ width: `${Math.max(6, (s.wait / maxWait) * 100)}%` }} /></div>
                 </div>;
               })}</div>
             </div>
@@ -972,11 +970,12 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
             <div className="ai-card hist-card">
               <h3><Users size={15} /> Tunggu per pelanggan</h3>
               <p className="muted sm">Rata-rata pesan→siap, 8 terlama hari ini.</p>
-              <div className="rank-list">{data.summary.perCustomer.map((c: any, i: number) => (
-                <div className="rank-row" key={c.customer} style={{ animationDelay: `${i * 0.04}s` }}>
+              <div className="rank-list cust-list">{data.summary.perCustomer.map((c: any, i: number) => (
+                <div className="rank-row cust-row" key={c.customer} style={{ animationDelay: `${i * 0.04}s` }}>
                   <span className={'rank r' + Math.min(i + 1, 3)}>{i + 1}</span>
-                  <div className="rank-main"><strong>{c.customer}</strong><div className="qty-bar"><i style={{ width: `${Math.max(6, (c.avgwait / maxWait) * 100)}%` }} /></div><small>{c.n}x · terlama {fmtDur(c.maxwait)}</small></div>
-                  <span className="rank-qty">{fmtDur(c.avgwait)}</span><b>{money(c.spent)}</b>
+                  <div className="rank-main"><strong>{c.customer}</strong><small>{c.n}x pesanan · terlama {fmtDur(c.maxwait)}</small><div className="qty-bar"><i style={{ width: `${Math.max(6, (c.avgwait / maxWait) * 100)}%` }} /></div></div>
+                  <div className="cust-avg"><b>{fmtDur(c.avgwait)}</b><small>rata tunggu</small></div>
+                  <div className="cust-spent"><b>{money(c.spent)}</b><small>total belanja</small></div>
                 </div>
               ))}</div>
             </div>
@@ -989,8 +988,9 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
           <p className="muted sm">Rata pesan→siap per jam (waktu kafe). Merah = lewat target {targetMin} mnt.</p>
           <div className="hour-grid">{(() => { const mx = Math.max(1, ...data.summary.perHour.map((r: any) => r.n)); return data.summary.perHour.map((r: any) => {
             const over = r.avgwait != null && r.avgwait > targetMin * 60000;
-            return <div key={r.h} className={'hour-cell' + (over ? ' over' : '')} title={`${r.n} pesanan, rata ${fmtDur(r.avgwait)}`}>
+            return <div key={r.h} className={'hour-cell' + (over ? ' over' : '') + (r.n === mx && mx > 1 ? ' busy' : '')} title={`${r.n} pesanan, rata ${fmtDur(r.avgwait)}`}>
               <b>{String(r.h).padStart(2, '0')}</b>
+              {r.n === mx && mx > 1 && <em className="busy-chip">tersibuk</em>}
               <div className="hour-bar"><i style={{ height: `${Math.max(6, (r.n / mx) * 100)}%` }} /></div>
               <span>{r.n}x</span><small>{fmtDur(r.avgwait)}</small>
             </div>;
