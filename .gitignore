@@ -58,3 +58,8 @@ opencode.json
 public/promo/*
 !public/promo/list.json
 /temancipta-paket-promosi-tv/
+
+# seed output raksasa (regenerable via seed-range.mjs)
+scripts/seed-range.sql
+scripts/seed-range-r*.sql
+
