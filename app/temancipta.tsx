@@ -416,12 +416,13 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
               <label>Catatan<Textarea maxLength={300} rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="cth: less ice" /></label>
               <label>Bayar pakai<SelectField label="Pembayaran" value={isBank ? 'Kartu' : method} onChange={choosePay} options={[['Tunai', 'Tunai'], ['QRIS', 'QRIS'], ['Kartu', 'Kartu / Bank']]} /></label>
               <label>Diskon (Rp)<Input type="number" min={0} max={total} value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></label>
-              {(disc > 0 || svc > 0 || tax > 0) && <div className="breakdown">
+              <div className="breakdown">
                 <div><span>Subtotal</span><b>{money(total)}</b></div>
                 {disc > 0 && <div><span>Diskon</span><b>-{money(disc)}</b></div>}
                 {svc > 0 && <div><span>Service {svcPct}%</span><b>{money(svc)}</b></div>}
                 {tax > 0 && <div><span>PBJT {taxPct}%</span><b>{money(tax)}</b></div>}
-              </div>}
+              </div>
+              <div className="total"><span>Total</span><strong>{money(grand)}</strong></div>
               {/qris/i.test(method) && (
                 <div className="qris-box">
                   {!qrisMissing ? <img src="/qris.png" alt="QRIS kafe" className="qris-img" onError={() => setQrisMissing(true)} /> : <p className="muted">QR belum dipasang — simpan file public/qris.png lalu deploy ulang.</p>}
@@ -437,7 +438,6 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
                   <Button type="button" variant="outline" onClick={() => setBankOpen(true)}>Detail transfer</Button>
                 </div>
               )}
-              <div className="total"><span>Total</span><strong>{money(grand)}</strong></div>
               <Button type="submit" className="full submit-order" disabled={!cart.length || !customer.trim() || busy || !connected}>{busy ? <Loader2 className="spin" /> : <ReceiptText />}{busy ? 'Menyimpan…' : 'Simpan pesanan'}<ArrowRight /></Button>
             </fieldset>
           </form>
