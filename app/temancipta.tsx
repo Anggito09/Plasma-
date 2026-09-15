@@ -1054,11 +1054,12 @@ function History({ config, products, day, onReceipt }: { config: Config; product
       {!!data?.summary.perHour?.length && (
         <div className="ai-card hist-card hour-card">
           <h3><Clock size={15} /> Jam ramai hari ini</h3>
-          <p className="muted sm">Rata pesan→siap per jam (waktu kafe). Merah = lewat target {targetMin} mnt.</p>
+          <p className="muted sm">Rata pesan→siap per jam ({config.timezone === 'Asia/Makassar' ? 'WITA' : config.timezone === 'Asia/Jayapura' ? 'WIT' : 'WIB'}). Merah = lewat target {targetMin} mnt.</p>
           <div className="hour-grid">{(() => { const mx = Math.max(1, ...data.summary.perHour.map((r: any) => r.n)); return data.summary.perHour.map((r: any) => {
             const over = r.avgwait != null && r.avgwait > targetMin * 60000;
-            return <div key={r.h} className={'hour-cell' + (over ? ' over' : '') + (r.n === mx && mx > 1 ? ' busy' : '')} title={`${r.n} pesanan, rata ${fmtDur(r.avgwait)}`}>
-              <b>{String(r.h).padStart(2, '0')}</b>
+            const label = `${String(r.h).padStart(2, '0')}.00`;
+            return <div key={r.h} className={'hour-cell' + (over ? ' over' : '') + (r.n === mx && mx > 1 ? ' busy' : '')} title={`${label}–${String((r.h + 1) % 24).padStart(2, '0')}.00: ${r.n} pesanan, rata ${fmtDur(r.avgwait)}`}>
+              <b>{label}</b>
               {r.n === mx && mx > 1 && <em className="busy-chip">tersibuk</em>}
               <div className="hour-bar"><i style={{ height: `${Math.max(6, (r.n / mx) * 100)}%` }} /></div>
               <span>{r.n}x</span><small>{fmtDur(r.avgwait)}</small>

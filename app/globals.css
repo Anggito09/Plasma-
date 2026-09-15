@@ -143,7 +143,7 @@ body{background:radial-gradient(rgba(154,74,30,.06) 1.2px,transparent 1.2px),rad
 .hour-grid{display:flex;gap:8px;overflow-x:auto;padding:6px 2px 2px;margin-top:10px}
 .hour-cell{display:flex;flex-direction:column;align-items:center;gap:4px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 8px;min-width:62px;animation:rise .3s ease backwards}
 .hour-cell.over{border-color:#f5c6c0;background:linear-gradient(180deg,#fff7ee,#fff)}
-.hour-cell b{font-size:.8rem;color:#9a4a1e}
+.hour-cell b{font-size:.86rem;color:#9a4a1e;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .hour-bar{height:56px;width:100%;display:flex;align-items:flex-end;justify-content:center;background:#fbf1e4;border-radius:8px;padding:4px}
 .hour-bar i{width:16px;border-radius:5px;background:linear-gradient(180deg,#9a4a1e,#e9a25b);animation:growUp .6s ease backwards;display:block}
 .hour-cell.over .hour-bar i{background:linear-gradient(180deg,#f43f5e,#a31e13)}
