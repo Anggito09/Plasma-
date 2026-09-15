@@ -678,25 +678,31 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
                   <p className="muted">Pilih rentang ≥ 2 hari (mis. 7 hari) untuk melihat garis naik-turun.</p>
                 </div>;
               })() : (() => {
-                const nets = days.map(d => (salesByDay[d] || 0) - (spentByDay[d] || 0));
+                const weekly = days.length > 14;
+                const seq: { label: string; full: string; v: number }[] = weekly
+                  ? (() => { const out = []; for (let i = 0; i < days.length; i += 7) { const ss = days.slice(i, i + 7); out.push({ label: `${ss[0].slice(5)}–${ss[ss.length - 1].slice(5)}`, full: `${ss[0]} s/d ${ss[ss.length - 1]}`, v: ss.reduce((a, d) => a + (salesByDay[d] || 0) - (spentByDay[d] || 0), 0) }); } return out; })()
+                  : days.map(d => ({ label: d.slice(5), full: d, v: (salesByDay[d] || 0) - (spentByDay[d] || 0) }));
+                const nets = seq.map(s => s.v);
                 const lo = Math.min(0, ...nets), hi = Math.max(0, ...nets), span = Math.max(1, hi - lo);
                 const W = 340, H = 150, P = 14;
-                const px = (i: number) => days.length < 2 ? W / 2 : P + (i / (days.length - 1)) * (W - P * 2);
+                const px = (i: number) => seq.length < 2 ? W / 2 : P + (i / (seq.length - 1)) * (W - P * 2);
                 const py = (v: number) => 12 + (1 - (v - lo) / span) * (H - 30);
                 const pts = nets.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
                 const area = `M${px(0).toFixed(1)},${py(0).toFixed(1)} L` + nets.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' L') + ` L${px(nets.length - 1).toFixed(1)},${py(0).toFixed(1)} Z`;
                 const best = nets.indexOf(Math.max(...nets)), worst = nets.indexOf(Math.min(...nets));
+                const dot = weekly ? 3.5 : 4.5;
                 return (<>
-                  <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Tren laba harian naik turun">
+                  {weekly && <p className="muted sm">Dikelompokkan per minggu (rentang &gt; 14 hari).</p>}
+                  <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Tren laba naik turun">
                     <defs><linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#9a4a1e" stopOpacity=".35" /><stop offset="1" stopColor="#9a4a1e" stopOpacity="0" /></linearGradient></defs>
                     {[0.25, 0.5, 0.75].map(f => <line key={f} x1={P} x2={W - P} y1={H * f} y2={H * f} stroke="#eadfd1" strokeWidth="1" />)}
                     <line x1={P} x2={W - P} y1={py(0)} y2={py(0)} stroke="#c9b69c" strokeWidth="1.2" strokeDasharray="5 4" />
                     <path d={area} fill="url(#trendFill)" />
-                    <polyline points={pts} fill="none" stroke="#9a4a1e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    {nets.map((v, i) => <circle key={days[i]} cx={px(i)} cy={py(v)} r={i === best || i === worst ? 6 : 4.5} fill={v >= 0 ? '#12b76a' : '#d92d20'} stroke="#fff" strokeWidth="2"><title>{days[i]}: {money(v)}</title></circle>)}
+                    <polyline points={pts} fill="none" stroke="#9a4a1e" strokeWidth={weekly ? 2.5 : 3} strokeLinecap="round" strokeLinejoin="round" />
+                    {nets.map((v, i) => <circle key={seq[i].full} cx={px(i)} cy={py(v)} r={i === best || i === worst ? dot + 1.5 : dot} fill={v >= 0 ? '#12b76a' : '#d92d20'} stroke="#fff" strokeWidth="1.5"><title>{seq[i].full}: {money(v)}</title></circle>)}
                   </svg>
-                  <div className="trend-days">{days.map((d, i) => <span key={d} className={nets[i] >= 0 ? 'pos' : 'neg'} title={`${d}: ${money(nets[i])}`}>{d.slice(5)}</span>)}</div>
-                  <div className="trend-meta"><span className="pos">▲ {shortRp(Math.max(...nets))} · {days[best]?.slice(5)}</span><span className="neg">▼ {shortRp(Math.min(...nets))} · {days[worst]?.slice(5)}</span></div>
+                  <div className="trend-days">{seq.map((s, i) => <span key={s.full} className={nets[i] >= 0 ? 'pos' : 'neg'} title={`${s.full}: ${money(nets[i])}`}>{s.label}</span>)}</div>
+                  <div className="trend-meta"><span className="pos">▲ {shortRp(Math.max(...nets))} · {seq[best]?.label}</span><span className="neg">▼ {shortRp(Math.min(...nets))} · {seq[worst]?.label}</span></div>
                 </>);
               })()}
             </div>
