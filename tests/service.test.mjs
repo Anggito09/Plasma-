@@ -73,6 +73,14 @@ test('display and kitchen roles cannot access admin or cashier APIs; revocation 
     }
     f.setCookie(admin);
 } const us = (await f.call('users')).data.users.find(u => u.role === 'cashier'); const login = await f.call('login', { username: 'cashier', password: 'staff-password-123' }); await f.call('users/access', { id: us.id, active: false }); f.setCookie(login.cookie); assert.equal((await f.call('me')).status, 401); f.sqlite.close(); });
+test('health and bootstrap expose demo flag', async () => {
+    const { db, sqlite } = database();
+    const service = createService(db, { clock: () => Date.parse('2026-09-11T16:59:58Z'), trustedSetup: true, demo: true });
+    const r = await service(new Request('https://temancipta.test/api/health'));
+    const d = await r.json();
+    assert.equal(r.status, 200); assert.equal(d.ok, true); assert.equal(d.demo, true);
+    sqlite.close();
+});
 test('setup cannot run twice, login throttles and sessions expire', async () => { const f = await fixture(); assert.equal((await f.call('setup', {})).status, 409); for (let i = 0; i < 8; i++)
     assert.equal((await f.call('login', { username: 'nobody', password: 'wrong' })).status, 401); assert.equal((await f.call('login', { username: 'nobody', password: 'wrong' })).status, 429); f.setClock(f.getClock() + 43200001); assert.equal((await f.call('me')).status, 401); f.sqlite.close(); });
 test('history search escapes SQL wildcards and event cursor reads more than 100 calls in pages', async () => { const f = await fixture(); const o = (await f.call('orders', f.order({ customer: '100% Cafe' }))).data.order; assert.equal((await f.call('history?search=%25')).data.count, 1); assert.equal((await f.call('history?search=_')).data.count, 0);     await f.call('orders/action', { id: o.id, version: 1, action: 'prepare', requestId: crypto.randomUUID() }); await f.call('orders/action', { id: o.id, version: 2, action: 'ready', requestId: crypto.randomUUID() }); for (let i = 0; i < 105; i++)

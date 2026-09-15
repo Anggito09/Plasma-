@@ -15,8 +15,8 @@ const publicUser = u => ({ id: u.id, name: u.name, username: u.username, role: u
 const isFoodCat = c => /makan|roti|kue|snack|food|bakery|cake|pastry|dessert/i.test(c || '');
 const targets = c => ({ all: Number.isSafeInteger(c.target_ready_min) ? c.target_ready_min : 10, food: Number.isSafeInteger(c.target_food_min) ? c.target_food_min : 15, drink: Number.isSafeInteger(c.target_drink_min) ? c.target_drink_min : 5, tax: Number.isSafeInteger(c.tax_pct) ? Math.min(Math.max(c.tax_pct, 0), 50) : 0, service: Number.isSafeInteger(c.service_pct) ? Math.min(Math.max(c.service_pct, 0), 50) : 0 });
 const parseOrder = o => o ? ({ ...o, items: JSON.parse(o.items), fingerprint: undefined }) : null;
-const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
-export function createService(db, { clock = () => Date.now(), setupKey = '', trustedSetup = false, ai = null } = {}) {
+const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', ...headers } });
+export function createService(db, { clock = () => Date.now(), setupKey = '', trustedSetup = false, ai = null, demo = false } = {}) {
     const q = (sql, ...args) => db.prepare(sql).bind(...args);
     const audit = (user, action, target, now) => q('INSERT INTO audit(actor,action,target,created_at) VALUES (?,?,?,?)', user.id, action, target, now);
     return async function handle(request) {
@@ -42,8 +42,10 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                     fail(400, 'Data tidak valid.');
             }
             const config = await q('SELECT * FROM settings WHERE id=1').first();
+            if (path === 'health' && method === 'GET')
+                return json({ ok: true, configured: !!config, demo, time: now });
             if (path === 'bootstrap' && method === 'GET')
-                return json({ configured: !!config });
+                return json({ configured: !!config, demo });
             if (path === 'setup' && method === 'POST') {
                 if (config)
                     fail(409, 'Aplikasi sudah dikonfigurasi. Silakan masuk.');
@@ -94,9 +96,13 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 fail(403, 'Akun ini tidak memiliki akses untuk tindakan tersebut.'); };
             const day = businessDay(now, config.timezone);
             if (path === 'me' && method === 'GET')
-                return json({ user: publicUser(user), config, day, serverTime: now });
+                return json({ user: publicUser(user), config, day, serverTime: now, demo });
             if (path === 'logout' && method === 'POST') {
                 await q('DELETE FROM sessions WHERE token=?', await digest(token)).run();
+                return json({ ok: true }, 200, { 'Set-Cookie': 'temancipta_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+            }
+            if (path === 'logout-all' && method === 'POST') {
+                await q('DELETE FROM sessions WHERE user_id=?', user.id).run();
                 return json({ ok: true }, 200, { 'Set-Cookie': 'temancipta_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
             }
             if (path === 'products' && method === 'GET') {

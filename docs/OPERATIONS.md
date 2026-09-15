@@ -47,3 +47,7 @@ Sessions expire after 12 hours. Sign in at the start of a shift. Disabling a sta
 The queue refreshes every 3 seconds; display call events refresh every 5 seconds (hemat kuota request, panggilan tetap berurutan via cursor). Saved data lives in the server database, not browser local storage. New orders cannot be submitted while the board is known to be disconnected.
 
 If a save fails after an uncertain connection result, retry the same unchanged order. Temancipta reuses its request ID, so the server returns the previously saved order instead of allocating another number. Do not change the draft or reload until checking history for the original order. Browser drafts are not durable, and offline order entry is not supported.
+
+GET/POST that hit a 5xx or network drop retry twice automatically (login/setup excluded). If the board shows **Menyambung…**, wait; new orders stay disabled until live.
+
+See `docs/RUNBOOK.md` for demo vs paid-client steps, phishing checks, and restore.

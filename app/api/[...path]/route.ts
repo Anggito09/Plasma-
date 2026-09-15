@@ -6,7 +6,8 @@ async function handle(request: Request) {
   // The private Sites gateway supplies verified identity headers. Never trust these on a public reverse proxy.
   const standalone=(env as unknown as Record<string,string>).TREFIKO_STANDALONE==='true';
   const trustedSetup=!standalone&&!!request.headers.get('oai-authenticated-user-id');
-  return createService(env.DB,{setupKey:(env as unknown as Record<string,string>).TREFIKO_SETUP_KEY||'',trustedSetup,ai:(env as unknown as Record<string,unknown>).AI||null})(request);
+  const vars = env as unknown as Record<string, unknown>;
+  return createService(env.DB,{setupKey:String(vars.TREFIKO_SETUP_KEY||''),trustedSetup,ai:vars.AI||null,demo:vars.TREFIKO_DEMO==='true'})(request);
 }
 export const GET=handle;
 export const POST=handle;

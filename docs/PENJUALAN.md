@@ -35,10 +35,16 @@ Awasi di dashboard: Workers → D1 → Metrics (rows read). Kalau overage D1 mun
 
 ## Checklist sebelum jual
 
-- [ ] Backup otomatis harian per DB + uji restore (lihat `docs/DEPLOYMENT.md`)
+- [x] Header keamanan API (nosniff, deny iframe, referrer, permissions)
+- [x] Login: throttle 8x/15 mnt, cookie HttpOnly+SameSite, CSRF origin
+- [x] Retry otomatis GET/POST 5xx (kecuali login)
+- [x] Banner mode demo + `/api/health`
+- [x] Peringatan domain palsu di halaman masuk
+- [x] Keluar dari semua perangkat
+- [x] Runbook `docs/RUNBOOK.md`
+- [ ] Backup otomatis harian (skrip `npm run backup` sudah ada — pasang Task Scheduler)
 - [ ] 2FA di akun Cloudflare + batasi akses API token
 - [ ] Kunci setup dikirim privat, tidak lewat chat biasa
 - [ ] Monitoring worker down (peringatan ke kamu, bukan ke klien)
-- [ ] Runbook support: reset akun, tambah menu, ganti QRIS, jam layanan
 - [ ] ToS + kebijakan privasi (data nama pelanggan & transaksi)
 - [ ] Harga menutup cloud + margin (pakai template di atas)

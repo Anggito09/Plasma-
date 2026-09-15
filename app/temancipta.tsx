@@ -45,11 +45,20 @@ const time = (n: number, tz = 'Asia/Jakarta') => new Date(n).toLocaleTimeString(
 function SelectField({ value, onChange, options, label }: { value: string; onChange: (s: string) => void; options: [string, string][]; label: string }) {
   return <Select value={value} onValueChange={onChange}><SelectTrigger aria-label={label}><SelectValue /></SelectTrigger><SelectContent>{options.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>;
 }
-async function api(path: string, body?: unknown): Promise<any> {
-  const r = await fetch('/api/' + path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+async function api(path: string, body?: unknown, attempt = 0): Promise<any> {
+  let r: Response;
+  try {
+    r = await fetch('/api/' + path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+  } catch {
+    if (attempt < 2) { await new Promise(ok => setTimeout(ok, 400 * (attempt + 1))); return api(path, body, attempt + 1); }
+    throw new Error('Tidak terhubung ke server. Periksa Wi-Fi lalu coba lagi.');
+  }
   let d: any;
   try { d = await r.json(); } catch { throw new Error('Tidak terhubung ke server.'); }
-  if (!r.ok) { const e = new Error(d.error || 'Gagal memproses.') as Error & { status: number }; e.status = r.status; throw e; }
+  if (!r.ok) {
+    if (r.status >= 500 && attempt < 2 && path !== 'login' && path !== 'setup') { await new Promise(ok => setTimeout(ok, 400 * (attempt + 1))); return api(path, body, attempt + 1); }
+    const e = new Error(d.error || 'Gagal memproses.') as Error & { status: number }; e.status = r.status; throw e;
+  }
   return d;
 }
 function Empty({ title, children }: { title: string; children?: React.ReactNode }) {
@@ -94,13 +103,15 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [receipt, setReceipt] = useState<Order | null>(null);
 
-  const loadMe = useCallback(async () => { const d = await api('me'); setUser(d.user); setConfig(d.config); setBoot('ready'); }, []);
+  const [demo, setDemo] = useState(false);
+  const loadMe = useCallback(async () => { const d = await api('me'); setUser(d.user); setConfig(d.config); setDemo(!!d.demo); setBoot('ready'); }, []);
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const d = await api('bootstrap');
         if (!alive) return;
+        setDemo(!!d.demo);
         if (!d.configured) setBoot('setup');
         else try { await loadMe(); } catch { if (alive) setBoot('login'); }
       } catch (e) { setError((e as Error).message); setBoot('login'); }
@@ -187,6 +198,7 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
           <div className="connection"><span className={connected ? 'online' : 'offline'} />{connected ? 'Live' : 'Menyambung…'}<small>{board?.day}{nowTick ? ` · ${nowTick}` : ''}</small></div>
         </div>
 
+        {demo && <div className="banner demo" role="status">Mode demo — data contoh, jangan dipakai operasional kafe.</div>}
         {error && <div className="banner error" role="alert">{error}<button onClick={() => setError('')} aria-label="Tutup pesan"><X size={17} /></button></div>}
         {notice && <div className="banner success" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Tutup pesan"><X size={17} /></button></div>}
 
@@ -223,6 +235,8 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
   const [busy, setBusy] = useState(false);
   const [tz, setTz] = useState('Asia/Jakarta');
   const [sample, setSample] = useState(true);
+  const [hostOk, setHostOk] = useState(true);
+  useEffect(() => { setHostOk(/temancipta\.workers\.dev$|localhost$|^127\.0\.0\.1$/.test(location.hostname)); }, []);
   return (
     <main className="auth">
       <section className="auth-brand">
@@ -242,7 +256,7 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
       </section>
       <section className="auth-form">
         {boot === 'loading' ? <><Loader2 className="spin" /><p>Menghubungkan…</p></> : (
-          <form onSubmit={async (e) => {
+          <form autoComplete="off" onSubmit={async (e) => {
             e.preventDefault();
             const v = Object.fromEntries(new FormData(e.currentTarget));
             setBusy(true);
@@ -251,6 +265,7 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
             <p className="eyebrow">MASUK PETUGAS</p>
             <h2>{boot === 'setup' ? 'Daftarkan usaha' : 'Masuk'}</h2>
             <p className="muted">{boot === 'setup' ? 'Hanya diisi sekali oleh penyedia layanan.' : 'Gunakan akun dari admin usaha Anda.'}</p>
+            {!hostOk && <p className="banner error" role="alert">Alamat ini bukan situs resmi Temancipta. Jangan masukkan sandi.</p>}
             {error && <p className="banner error" role="alert">{error}</p>}
             {notice && <p className="banner success">{notice}</p>}
             {boot === 'setup' && (
@@ -261,8 +276,8 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
                 <label>Kunci setup <span className="muted">(khusus penyedia layanan)</span><Input name="setupKey" type="password" autoComplete="off" /></label>
               </>
             )}
-            <label>Username<Input name="username" required autoComplete="off" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="" /></label>
-            <label>Kata sandi<Input name="password" type="password" required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete="off" placeholder="" /></label>
+            <label>Username<Input name="username" required autoComplete="username" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="" /></label>
+            <label>Kata sandi<Input name="password" type="password" required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete={boot === 'setup' ? 'new-password' : 'current-password'} placeholder="" /></label>
             {boot === 'setup' && <div className="switch-row"><Switch id="sample" checked={sample} onCheckedChange={setSample} /><Label htmlFor="sample">Isi contoh menu</Label></div>}
             <Button className="full" disabled={busy}>{busy ? <Loader2 className="spin" /> : null}{boot === 'setup' ? 'Simpan' : 'Masuk'}<ArrowRight /></Button>
           </form>
@@ -1193,6 +1208,7 @@ function SettingsPanel({ config, products, payments, limited, onSave, onLogout }
             <label>Sandi lama<Input type="password" name="current" required autoComplete="current-password" /></label>
             <label>Sandi baru<Input type="password" name="password" minLength={10} maxLength={128} required autoComplete="new-password" /></label>
             <Button disabled={busy}>Ubah</Button>
+            <Button type="button" variant="outline" disabled={busy} onClick={async () => { if (!confirm('Keluar dari semua perangkat?')) return; try { await api('logout-all', {}); onLogout(); } catch (e) { setError((e as Error).message); } }}>Keluar dari semua perangkat</Button>
           </form>
         </TabsContent>
       </Tabs>
