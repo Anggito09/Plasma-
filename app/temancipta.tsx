@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Coffee, Monitor, ChefHat, ReceiptText, Settings, LogOut, Search, Plus, Minus, ShoppingBag, Utensils, ArrowRight, Volume2, VolumeX, Maximize, Check, Clock, RotateCcw, Printer, X, Users, ShieldCheck, Ticket, ChevronLeft, ChevronRight, Loader2, Pencil, Archive, Wallet, TrendingUp, TrendingDown, Trash2, Sparkles, Store, CupSoda, CakeSlice, Sandwich, Cookie, Croissant, Donut, Milk, Leaf, Snowflake, GlassWater, Citrus, Soup, Salad, Popcorn, Drumstick, Timer, Ban, Target, Flame, Lightbulb, Megaphone, Trophy } from 'lucide-react';
+import { Coffee, Monitor, ChefHat, ReceiptText, Settings, LogOut, Search, Plus, Minus, ShoppingBag, Utensils, ArrowRight, Volume2, VolumeX, Maximize, Check, Clock, RotateCcw, Printer, X, Users, ShieldCheck, Ticket, ChevronLeft, ChevronRight, Loader2, Pencil, Archive, Wallet, TrendingUp, TrendingDown, Trash2, Sparkles, Store, CupSoda, CakeSlice, Sandwich, Cookie, Croissant, Donut, Milk, Leaf, Snowflake, GlassWater, Citrus, Soup, Salad, Popcorn, Drumstick, Timer, Ban, Target, Flame, Lightbulb, Megaphone, Trophy, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -235,17 +235,16 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
   const [busy, setBusy] = useState(false);
   const [tz, setTz] = useState('Asia/Jakarta');
   const [sample, setSample] = useState(true);
+  const [showPw, setShowPw] = useState(false);
   const [hostOk, setHostOk] = useState(true);
   useEffect(() => { setHostOk(/temancipta\.workers\.dev$|localhost$|^127\.0\.0\.1$/.test(location.hostname)); }, []);
   return (
-    <main className="auth">
+    <main className="auth porto">
       <section className="auth-brand">
-        <div className="brand">
-          <img src="/logo-temancipta.svg" alt="Temancipta" className="brand-logo-wide" />
-        </div>
+        <div className="porto-badge"><span className="porto-t">T</span><span className="porto-name">TEMANCIPTA</span></div>
         <div className="auth-hero">
           <p className="eyebrow light">KASIR • DAPUR • TV ANTREAN • KEUANGAN</p>
-          <h1>Kasir & antrean<br />untuk kafe Anda.</h1>
+          <h1>Kasir <em className="amp">&</em> antrean<br />untuk kafe Anda.</h1>
           <p className="auth-desc">Kelola pesanan, dapur, TV antrean bersuara, dan keuangan dalam satu aplikasi yang cepat dan rapi.</p>
           <div className="auth-steps">
             <span><b>1</b>Kami daftarkan usaha Anda</span>
@@ -256,7 +255,7 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
       </section>
       <section className="auth-form">
         {boot === 'loading' ? <><Loader2 className="spin" /><p>Menghubungkan…</p></> : (
-          <form autoComplete="off" onSubmit={async (e) => {
+          <form className="porto-card" autoComplete="off" onSubmit={async (e) => {
             e.preventDefault();
             const v = Object.fromEntries(new FormData(e.currentTarget));
             setBusy(true);
@@ -270,16 +269,16 @@ function Auth({ boot, error, notice, onSubmit }: { boot: string; error: string; 
             {notice && <p className="banner success">{notice}</p>}
             {boot === 'setup' && (
               <>
-                <label>Nama kafe<Input name="cafe" required maxLength={80} placeholder="cth: Kopi Sudirman" /></label>
-                <label>Nama admin<Input name="name" required maxLength={80} /></label>
-                <label>Zona waktu<SelectField label="Zona waktu" value={tz} onChange={setTz} options={[['Asia/Jakarta', 'WIB — Jakarta'], ['Asia/Makassar', 'WITA — Makassar'], ['Asia/Jayapura', 'WIT — Jayapura']]} /></label>
-                <label>Kunci setup <span className="muted">(khusus penyedia layanan)</span><Input name="setupKey" type="password" autoComplete="off" /></label>
+                <label className="porto-label">Nama kafe<Input name="cafe" required maxLength={80} placeholder="cth: Kopi Sudirman" /></label>
+                <label className="porto-label">Nama admin<Input name="name" required maxLength={80} placeholder="Nama pemilik" /></label>
+                <label className="porto-label">Zona waktu<SelectField label="Zona waktu" value={tz} onChange={setTz} options={[['Asia/Jakarta', 'WIB — Jakarta'], ['Asia/Makassar', 'WITA — Makassar'], ['Asia/Jayapura', 'WIT — Jayapura']]} /></label>
+                <label className="porto-label">Kunci setup<Input name="setupKey" type="password" autoComplete="off" placeholder="Khusus penyedia layanan" /></label>
               </>
             )}
-            <label>Username<Input name="username" required autoComplete="username" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="" /></label>
-            <label>Kata sandi<Input name="password" type="password" required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete={boot === 'setup' ? 'new-password' : 'current-password'} placeholder="" /></label>
+            <label className="porto-label">Username<Input name="username" required autoComplete="username" maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="" /></label>
+            <label className="porto-label">Kata sandi<span className="pw-wrap"><Input name="password" type={showPw ? 'text' : 'password'} required minLength={boot === 'setup' ? 10 : 1} maxLength={128} autoComplete={boot === 'setup' ? 'new-password' : 'current-password'} placeholder="" /><button type="button" className="pw-eye" aria-label={showPw ? 'Sembunyikan sandi' : 'Tampilkan sandi'} onClick={() => setShowPw(v => !v)}>{showPw ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>
             {boot === 'setup' && <div className="switch-row"><Switch id="sample" checked={sample} onCheckedChange={setSample} /><Label htmlFor="sample">Isi contoh menu</Label></div>}
-            <Button className="full" disabled={busy}>{busy ? <Loader2 className="spin" /> : null}{boot === 'setup' ? 'Simpan' : 'Masuk'}<ArrowRight /></Button>
+            <Button className="full porto-btn" disabled={busy}>{busy ? <Loader2 className="spin" /> : null}{boot === 'setup' ? 'Simpan' : 'Masuk'}<ArrowRight size={17} /></Button>
           </form>
         )}
       </section>
