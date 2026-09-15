@@ -420,7 +420,7 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
                 <div><span>Subtotal</span><b>{money(total)}</b></div>
                 {disc > 0 && <div><span>Diskon</span><b>-{money(disc)}</b></div>}
                 {svc > 0 && <div><span>Service {svcPct}%</span><b>{money(svc)}</b></div>}
-                {tax > 0 && <div><span>Pajak {taxPct}%</span><b>{money(tax)}</b></div>}
+                {tax > 0 && <div><span>PBJT {taxPct}%</span><b>{money(tax)}</b></div>}
               </div>}
               {/qris/i.test(method) && (
                 <div className="qris-box">
@@ -563,7 +563,7 @@ function Receipt({ order: o, config }: { order: Order; config: Config }) {
       {!!(o.discount_rp || o.service_rp || o.tax_rp) && <div className="receipt-items">
         {!!o.discount_rp && <div><span>Diskon</span><b>-{money(o.discount_rp)}</b></div>}
         {!!o.service_rp && <div><span>Service</span><b>{money(o.service_rp)}</b></div>}
-        {!!o.tax_rp && <div><span>Pajak</span><b>{money(o.tax_rp)}</b></div>}
+        {!!o.tax_rp && <div><span>PBJT</span><b>{money(o.tax_rp)}</b></div>}
       </div>}
       {o.note && <p className="receipt-note">Catatan: {o.note}</p>}
       <div className="receipt-total"><strong>TOTAL</strong><strong>{money(o.total)}</strong></div>
@@ -1141,8 +1141,10 @@ function SettingsPanel({ config, products, payments, limited, onSave, onLogout }
             <div className="set-2col">
               <label>Target makanan (mnt)<Input name="targetFood" type="number" min={1} max={180} defaultValue={config.target_food_min ?? 15} /></label>
               <label>Target minuman (mnt)<Input name="targetDrink" type="number" min={1} max={180} defaultValue={config.target_drink_min ?? 5} /></label>
-              <label>Service (%)<Input name="servicePct" type="number" min={0} max={50} defaultValue={config.service_pct ?? 0} /></label>
-              <label>Pajak (%)<Input name="taxPct" type="number" min={0} max={50} defaultValue={config.tax_pct ?? 0} /></label>
+              <label>Service (%) — kebijakan kafe<Input name="servicePct" type="number" min={0} max={50} defaultValue={config.service_pct ?? 0} /></label>
+              <label>PBJT / pajak resto (%)<Input name="taxPct" type="number" min={0} max={10} defaultValue={config.tax_pct ?? 0} /></label>
+            </div>
+            <div className="info-box"><ReceiptText size={20} /><div><strong>Makan di kafe tidak kena PPN</strong><p>Yang berlaku PBJT maks 10% (UU HKPD). UMKM di bawah ambang Perda tidak wajib pungut — isi 0 (mis. DKI ≤ Rp42 jt/bln, Solo ≤ Rp7,5 jt/bln). Service 5% itu kebijakan sendiri, bukan pajak.</p></div>
             </div>
             <div className="info-box"><Clock size={20} /><div><strong>Nomor reset 00.00</strong><p>{config.timezone} · kembali ke A0001 tiap tanggal baru.</p></div></div>
             <Button disabled={busy}>Simpan</Button>

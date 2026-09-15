@@ -254,7 +254,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const keep = v => Number.isSafeInteger(v) ? v : 0;
                 const targetFood = body.targetFood === undefined || body.targetFood === '' ? keep(config.target_food_min) || 15 : int(Number(body.targetFood), 1, 180);
                 const targetDrink = body.targetDrink === undefined || body.targetDrink === '' ? keep(config.target_drink_min) || 5 : int(Number(body.targetDrink), 1, 180);
-                const taxPct = body.taxPct === undefined || body.taxPct === '' ? keep(config.tax_pct) : int(Number(body.taxPct), 0, 50);
+                const taxPct = body.taxPct === undefined || body.taxPct === '' ? keep(config.tax_pct) : int(Number(body.taxPct), 0, 10);
                 const servicePct = body.servicePct === undefined || body.servicePct === '' ? keep(config.service_pct) : int(Number(body.servicePct), 0, 50);
                 await db.batch([q('UPDATE settings SET name=?,footer=?,target_ready_min=?,target_food_min=?,target_drink_min=?,tax_pct=?,service_pct=? WHERE id=1', name, footer, target, targetFood, targetDrink, taxPct, servicePct), audit(user, 'settings.update', '1', now)]);
                 return json({ ok: true });
