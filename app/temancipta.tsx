@@ -797,8 +797,10 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
           <p className="ai-src"><span className={'ai-badge ' + (ai.source === 'ai' ? 'cloud' : '')}>{ai.source === 'ai' ? 'AI' : 'Aturan'}</span> <span className="muted">{ai.from}–{ai.to}{ai.nReady ? ` · rata ${fmtDur(ai.avgReady)} · tipikal ${fmtDur(ai.medianReady)} (${ai.nOnTarget}/${ai.nReady} on target)` : ''}{ai.peakHour ? ` · tersibuk ${String(ai.peakHour.h).padStart(2, '0')}.00` : ''}</span></p>
           {!!ai.targetTrend?.some((t: any) => t.pct != null) && (
             <div className="ai-card mt"><h3><Target size={15} /> Ketercapaian target per hari</h3>
-              <div className="trend-day-list">{ai.targetTrend.map((t: any) => t.pct == null ? null : (
-                <div className="trow" key={t.day} style={{ animationDelay: '0s' }}><span>{t.day.slice(5)}</span><div className="bar-track"><div className={'bar ' + (t.pct >= 85 ? 'in' : 'out')} style={{ width: `${Math.max(3, t.pct)}%` }} /></div><b>{t.pct}%</b></div>
+              <div className="target-grid">{ai.targetTrend.map((t: any, i: number) => t.pct == null ? null : (
+                <div key={t.day} className={'tcell ' + (t.pct >= 85 ? 'ok' : t.pct >= 50 ? 'mid' : 'low')} style={{ animationDelay: `${Math.min(i, 20) * 0.02}s` }} title={`${t.day}: ${t.pct}% dari ${t.n} pesanan`}>
+                  <span>{t.day.slice(5)}</span><b>{t.pct}%</b>
+                </div>
               ))}</div>
             </div>
           )}
