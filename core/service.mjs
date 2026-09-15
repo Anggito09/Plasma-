@@ -12,6 +12,8 @@ const int = (x, min, max) => { if (!Number.isSafeInteger(x) || x < min || x > ma
 const oneOf = (x, values) => { if (!values.includes(x))
     fail(400, 'Pilihan tidak valid.'); return x; };
 const publicUser = u => ({ id: u.id, name: u.name, username: u.username, role: u.role });
+const isFoodCat = c => /makan|roti|kue|snack|food|bakery|cake|pastry|dessert/i.test(c || '');
+const targets = c => ({ all: Number.isSafeInteger(c.target_ready_min) ? c.target_ready_min : 10, food: Number.isSafeInteger(c.target_food_min) ? c.target_food_min : 15, drink: Number.isSafeInteger(c.target_drink_min) ? c.target_drink_min : 5, tax: Number.isSafeInteger(c.tax_pct) ? Math.min(Math.max(c.tax_pct, 0), 50) : 0, service: Number.isSafeInteger(c.service_pct) ? Math.min(Math.max(c.service_pct, 0), 50) : 0 });
 const parseOrder = o => o ? ({ ...o, items: JSON.parse(o.items), fingerprint: undefined }) : null;
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
 export function createService(db, { clock = () => Date.now(), setupKey = '', trustedSetup = false, ai = null } = {}) {
@@ -98,7 +100,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 return json({ ok: true }, 200, { 'Set-Cookie': 'temancipta_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
             }
             if (path === 'products' && method === 'GET') {
-                allow('admin', 'cashier');
+                allow('admin', 'cashier', 'kitchen');
                 return json({ products: (await q('SELECT * FROM products ORDER BY category,name').all()).results });
             }
             if (path === 'payments' && method === 'GET') {
@@ -119,7 +121,9 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
             if (path === 'products' && method === 'POST') {
                 allow('admin', 'cashier');
                 const id = body.id ? uuid(body.id) : crypto.randomUUID(), name = str(body.name, 80), category = str(body.category, 40), price = int(body.price, 0, 100000000), active = body.active === false ? 0 : 1;
-                await db.batch([q('INSERT INTO products(id,name,category,price,active) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,category=excluded.category,price=excluded.price,active=excluded.active', id, name, category, price, active), audit(user, 'product.save', id, now)]);
+                const img = body.img === undefined || body.img === null || body.img === '' ? '' : str(String(body.img), 500);
+                if (img && !/^https?:\/\//i.test(img)) fail(400, 'Foto harus URL http(s).');
+                await db.batch([q('INSERT INTO products(id,name,category,price,active,img) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,category=excluded.category,price=excluded.price,active=excluded.active,img=excluded.img', id, name, category, price, active, img), audit(user, 'product.save', id, now)]);
                 return json({ ok: true, id });
             }
             if (path === 'orders' && method === 'POST') {
@@ -133,22 +137,28 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const selected = body.items.map(i => ({ id: uuid(i.id), quantity: int(i.quantity, 1, 99) }));
                 if (new Set(selected.map(i => i.id)).size !== selected.length)
                     fail(400, 'Menu duplikat. Gabungkan jumlahnya.');
-                const fingerprint = await digest(JSON.stringify({ customer, mode, payment, note, items: selected }));
+                const t = targets(config);
+                const products = (await q(`SELECT * FROM products WHERE active=1 AND id IN (${selected.map(() => '?').join(',')})`, ...selected.map(i => i.id)).all()).results;
+                const items = selected.map(i => { const p = products.find(p => p.id === i.id); if (!p)
+                    fail(409, 'Menu sudah berubah atau tidak tersedia. Muat ulang menu.'); return { id: p.id, name: p.name, price: p.price, quantity: i.quantity }; });
+                const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+                int(subtotal, 0, 2000000000);
+                const discount = body.discount === undefined || body.discount === '' || body.discount === null ? 0 : int(Number(body.discount), 0, subtotal);
+                const service = Math.round((subtotal - discount) * t.service / 100);
+                const tax = Math.round((subtotal - discount + service) * t.tax / 100);
+                const total = subtotal - discount + service + tax;
+                int(total, 0, 2000000000);
+                if(body.expectedTotal !== undefined && body.expectedTotal !== total) fail(409, "Harga menu berubah. Total sudah diperbarui; periksa pembayaran sebelum menyimpan ulang.");
+                const fingerprint = await digest(JSON.stringify({ customer, mode, payment, note, items: selected, discount }));
                 const existing = await q('SELECT * FROM orders WHERE id=?', id).first();
                 if (existing) {
                     if (existing.fingerprint !== fingerprint)
                         fail(409, 'Permintaan sebelumnya berbeda. Periksa riwayat sebelum membuat pesanan baru.');
                     return json({ order: parseOrder(existing), replayed: true });
                 }
-                const products = (await q(`SELECT * FROM products WHERE active=1 AND id IN (${selected.map(() => '?').join(',')})`, ...selected.map(i => i.id)).all()).results;
-                const items = selected.map(i => { const p = products.find(p => p.id === i.id); if (!p)
-                    fail(409, 'Menu sudah berubah atau tidak tersedia. Muat ulang menu.'); return { id: p.id, name: p.name, price: p.price, quantity: i.quantity }; });
-                const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-                int(total, 0, 2000000000);
-                if(body.expectedTotal !== undefined && body.expectedTotal !== total) fail(409, "Harga menu berubah. Total sudah diperbarui; periksa pembayaran sebelum menyimpan ulang.");
                 const results = await db.batch([
-                    q(`INSERT INTO orders(id,day,number,customer,mode,items,note,total,payment,status,created_at,updated_at,created_by,fingerprint)
-        SELECT ?,?,COALESCE(MAX(number),0)+1,?,?,?,?,?,?,'waiting',?,?,?,? FROM orders WHERE day=? ON CONFLICT(id) DO NOTHING`, id, day, customer, mode, JSON.stringify(items), note, total, payment, now, now, user.id, fingerprint, day),
+                    q(`INSERT INTO orders(id,day,number,customer,mode,items,note,total,payment,status,created_at,updated_at,created_by,fingerprint,discount_rp,service_rp,tax_rp)
+        SELECT ?,?,COALESCE(MAX(number),0)+1,?,?,?,?,?,?,'waiting',?,?,?,?,?,?,? FROM orders WHERE day=? ON CONFLICT(id) DO NOTHING`, id, day, customer, mode, JSON.stringify(items), note, total, payment, now, now, user.id, fingerprint, discount, service, tax, day),
                     q("INSERT INTO audit(actor,action,target,created_at) SELECT ?,'order.create',?,? WHERE changes()=1", user.id, id, now),
                     q('SELECT * FROM orders WHERE id=?', id)
                 ]);
@@ -223,19 +233,30 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COALESCE(AVG(CASE WHEN completed_at IS NOT NULL AND ready_at IS NOT NULL THEN completed_at-ready_at END),0) AS avg_take,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready FROM orders WHERE day=?", date).first();
                 const durs = (await q('SELECT ready_at-created_at AS d FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at>=created_at ORDER BY d', date).all()).results.map(r => r.d);
                 const medianReady = durs.length ? durs[Math.floor(durs.length / 2)] : 0;
-                const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
-                const onTarget = await q('SELECT COUNT(*) AS n FROM orders WHERE day=? AND ready_at IS NOT NULL AND ready_at-created_at<=?', date, targetMin * 60000).first();
+                const tg = targets(config);
+                const targetMin = tg.all;
+                const prodCats = (await q('SELECT id,category FROM products').all()).results;
+                const foodIds = new Set(prodCats.filter(p => isFoodCat(p.category)).map(p => p.id));
+                const rowTarget = itemsJson => { try { return JSON.parse(itemsJson).some(i => foodIds.has(i.id)) ? tg.food : tg.drink; } catch { return tg.all; } };
+                const readyRows = (await q('SELECT items,ready_at,created_at FROM orders WHERE day=? AND ready_at IS NOT NULL', date).all()).results;
+                const nOnTarget = readyRows.filter(r => r.ready_at >= r.created_at && r.ready_at - r.created_at <= rowTarget(r.items) * 60000).length;
                 const slowest = (await q('SELECT number,customer,ready_at-created_at AS wait FROM orders WHERE day=? AND ready_at IS NOT NULL ORDER BY wait DESC LIMIT 10', date).all()).results;
                 const perCustomer = (await q("SELECT customer,COUNT(*) AS n,COALESCE(SUM(CASE WHEN status!='cancelled' THEN total ELSE 0 END),0) AS spent,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait,MAX(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS maxwait FROM orders WHERE day=? GROUP BY customer HAVING avgwait IS NOT NULL ORDER BY avgwait DESC LIMIT 8", date).all()).results;
                 const tzOff = config.timezone === 'Asia/Makassar' ? 8 * 3600000 : config.timezone === 'Asia/Jayapura' ? 9 * 3600000 : 7 * 3600000;
                 const perHour = (await q("SELECT CAST(((created_at + ?) / 3600000) % 24 AS INTEGER) AS h,COUNT(*) AS n,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait FROM orders WHERE day=? AND status!='cancelled' GROUP BY h ORDER BY h", tzOff, date).all()).results;
-                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready, medianReady, perCustomer, perHour, targetMin, nOnTarget: onTarget.n, slowest } });
+                const perStaff = (await q("SELECT o.created_by AS id,COALESCE(u.name,'-') AS name,COUNT(*) AS n,COALESCE(SUM(CASE WHEN o.status!='cancelled' THEN o.total ELSE 0 END),0) AS sales,AVG(CASE WHEN o.ready_at IS NOT NULL AND o.ready_at>=o.created_at THEN o.ready_at-o.created_at END) AS avgwait FROM orders o LEFT JOIN users u ON u.id=o.created_by WHERE o.day=? AND o.status!='cancelled' GROUP BY o.created_by HAVING avgwait IS NOT NULL ORDER BY avgwait ASC LIMIT 8", date).all()).results;
+                return json({ orders: rows.results.map(parseOrder), count: count.count, page, summary: { ...summary, avgReady: timing.avg_ready, avgTake: timing.avg_take, nReady: timing.n_ready, medianReady, perCustomer, perHour, perStaff, targetMin, targetFood: tg.food, targetDrink: tg.drink, nOnTarget, slowest } });
             }
             if (path === 'settings' && method === 'POST') {
                 allow('admin');
                 const name = str(body.name, 80), footer = str(body.footer, 200, 0);
                 const target = body.target === undefined || body.target === '' ? (Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10) : int(Number(body.target), 1, 180);
-                await db.batch([q('UPDATE settings SET name=?,footer=?,target_ready_min=? WHERE id=1', name, footer, target), audit(user, 'settings.update', '1', now)]);
+                const keep = v => Number.isSafeInteger(v) ? v : 0;
+                const targetFood = body.targetFood === undefined || body.targetFood === '' ? keep(config.target_food_min) || 15 : int(Number(body.targetFood), 1, 180);
+                const targetDrink = body.targetDrink === undefined || body.targetDrink === '' ? keep(config.target_drink_min) || 5 : int(Number(body.targetDrink), 1, 180);
+                const taxPct = body.taxPct === undefined || body.taxPct === '' ? keep(config.tax_pct) : int(Number(body.taxPct), 0, 50);
+                const servicePct = body.servicePct === undefined || body.servicePct === '' ? keep(config.service_pct) : int(Number(body.servicePct), 0, 50);
+                await db.batch([q('UPDATE settings SET name=?,footer=?,target_ready_min=?,target_food_min=?,target_drink_min=?,tax_pct=?,service_pct=? WHERE id=1', name, footer, target, targetFood, targetDrink, taxPct, servicePct), audit(user, 'settings.update', '1', now)]);
                 return json({ ok: true });
             }
             if (path === 'users' && method === 'GET') {
@@ -312,15 +333,28 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 agg.cancelled = (await q("SELECT COUNT(*) AS n FROM orders WHERE day>=? AND day<=? AND status='cancelled'", from, to).first()).n;
                 const perDay = (await q("SELECT day,COUNT(*) AS orders,COALESCE(SUM(total),0) AS sales FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY day ORDER BY day", from, to).all()).results;
                 const paymix = (await q("SELECT payment,COUNT(*) AS n FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY payment ORDER BY n DESC", from, to).all()).results;
-                const targetMin = Number.isSafeInteger(config.target_ready_min) ? config.target_ready_min : 10;
-                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready,COUNT(CASE WHEN ready_at IS NOT NULL AND ready_at-created_at<=? THEN 1 END) AS n_on FROM orders WHERE day>=? AND day<=?", targetMin * 60000, from, to).first();
+                const tg = targets(config);
+                const targetMin = tg.all;
+                const timing = await q("SELECT COALESCE(AVG(CASE WHEN ready_at IS NOT NULL THEN ready_at-created_at END),0) AS avg_ready,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready FROM orders WHERE day>=? AND day<=?", from, to).first();
                 const medianRows = (await q('SELECT ready_at-created_at AS d FROM orders WHERE day>=? AND day<=? AND ready_at IS NOT NULL AND ready_at>=created_at ORDER BY d', from, to).all()).results.map(r => r.d);
                 const medianReady = medianRows.length ? medianRows[Math.floor(medianRows.length / 2)] : 0;
-                const itemRows = (await q("SELECT items,ready_at,created_at FROM orders WHERE day>=? AND day<=? AND status!='cancelled' LIMIT 3000", from, to).all()).results;
+                const prodCats = (await q('SELECT id,category FROM products').all()).results;
+                const foodIds = new Set(prodCats.filter(p => isFoodCat(p.category)).map(p => p.id));
+                const rowIsFood = itemsJson => { try { return JSON.parse(itemsJson).some(i => foodIds.has(i.id)); } catch { return false; } };
+                const itemRows = (await q("SELECT day,items,ready_at,created_at FROM orders WHERE day>=? AND day<=? AND status!='cancelled' LIMIT 3000", from, to).all()).results;
                 const items = {};
                 const waitByMenu = {};
+                const dayMix = {};
+                let nOn = 0;
                 for (const r of itemRows) {
                     let wait = r.ready_at != null && r.created_at != null && r.ready_at >= r.created_at ? r.ready_at - r.created_at : null;
+                    const food = rowIsFood(r.items);
+                    const lim = (food ? tg.food : tg.drink) * 60000;
+                    if (wait != null) {
+                        dayMix[r.day] = dayMix[r.day] || { ready: 0, on: 0 };
+                        dayMix[r.day].ready += 1;
+                        if (wait <= lim) { dayMix[r.day].on += 1; nOn += 1; }
+                    }
                     try {
                         for (const i of JSON.parse(r.items)) {
                             const name = String(i.name || '').slice(0, 60);
@@ -341,13 +375,13 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                 const activeProducts = (await q('SELECT name FROM products WHERE active=1 ORDER BY name').all()).results.map(r => String(r.name));
                 const deadNames = activeProducts.filter(n => !items[n]);
                 const deadMenu = deadNames.map((name, i) => ({ name, saran: deadNames.length >= 5 && i >= 3 ? 'coret' : 'promo' }));
-                const slowMenu = Object.values(waitByMenu).map(v => ({ name: v.name, avgWait: Math.round(v.totalWait / v.n), maxWait: v.maxWait, n: v.n })).sort((a, b) => b.avgWait - a.avgWait || b.n - a.n).slice(0, 8);
-                const pctOn = timing.n_ready ? Math.round(timing.n_on / timing.n_ready * 100) : 0;
-                const targetTrend = (await q('SELECT day,COUNT(CASE WHEN ready_at IS NOT NULL THEN 1 END) AS n_ready,COUNT(CASE WHEN ready_at IS NOT NULL AND ready_at-created_at<=? THEN 1 END) AS n_on FROM orders WHERE day>=? AND day<=? GROUP BY day ORDER BY day', targetMin * 60000, from, to).all()).results.map(r => ({ day: r.day, pct: r.n_ready ? Math.round(r.n_on / r.n_ready * 100) : null, n: r.n_ready }));
+                const slowMenu = Object.values(waitByMenu).map(v => ({ name: v.name, avgWait: Math.round(v.totalWait / v.n), maxWait: v.maxWait, n: v.n, solid: v.n >= 3 })).sort((a, b) => b.avgWait - a.avgWait || b.n - a.n).slice(0, 8);
+                const pctOn = timing.n_ready ? Math.round(nOn / timing.n_ready * 100) : 0;
+                const targetTrend = perDay.map(d => { const m = dayMix[d.day]; return { day: d.day, pct: m && m.ready ? Math.round(m.on / m.ready * 100) : null, n: m ? m.ready : 0 }; });
                 const tzOff = config.timezone === 'Asia/Makassar' ? 8 * 3600000 : config.timezone === 'Asia/Jayapura' ? 9 * 3600000 : 7 * 3600000;
                 const perHour = (await q("SELECT CAST(((created_at + ?) / 3600000) % 24 AS INTEGER) AS h,COUNT(*) AS n,AVG(CASE WHEN ready_at IS NOT NULL AND ready_at>=created_at THEN ready_at-created_at END) AS avgwait FROM orders WHERE day>=? AND day<=? AND status!='cancelled' GROUP BY h ORDER BY h", tzOff, from, to).all()).results;
                 const peak = perHour.filter(r => r.avgwait != null).sort((a, b) => b.avgwait - a.avgwait)[0] || null;
-                const stats = { from, to, days, orders: agg.orders, sales: agg.sales, cancelled: agg.cancelled, avgTicket: agg.orders ? Math.round(agg.sales / agg.orders) : 0, perDay, paymix, topItems, avgReady: timing.avg_ready, medianReady, nReady: timing.n_ready, nOnTarget: timing.n_on, pctOnTarget: pctOn, targetMin, slowMenu, deadMenu, targetTrend, perHour, peakHour: peak ? { h: peak.h, avgWait: Math.round(peak.avgwait), n: peak.n } : null };
+                const stats = { from, to, days, orders: agg.orders, sales: agg.sales, cancelled: agg.cancelled, avgTicket: agg.orders ? Math.round(agg.sales / agg.orders) : 0, perDay, paymix, topItems, avgReady: timing.avg_ready, medianReady, nReady: timing.n_ready, nOnTarget: nOn, pctOnTarget: pctOn, targetMin, targetFood: tg.food, targetDrink: tg.drink, slowMenu, deadMenu, targetTrend, perHour, peakHour: peak ? { h: peak.h, avgWait: Math.round(peak.avgwait), n: peak.n } : null };
                 let narrative = '', source = 'aturan';
                 const rupiah = n => 'Rp' + Math.round(n).toLocaleString('id-ID');
                 const fmt = ms => {
@@ -370,7 +404,9 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                     lines.push(`1. Tren: ${from}–${to} ${agg.orders} pesanan, omzet ${rupiah(agg.sales)}, nota rata-rata ${rupiah(stats.avgTicket)}.${trenHalf()}`);
                     if (topItems.length) {
                         let menu = `2. Menu andalan: ${topItems.slice(0, 3).map(t => `${t.name} (${t.qty}x)`).join(', ')}.`;
-                        if (slowMenu.length) menu += ` ${slowPhrase(slowMenu[0])}, paling lambat.${slowMenu[1] ? ` Lalu ${slowPhrase(slowMenu[1])}.` : ''}`;
+                        const slowClaim = slowMenu.find(s => s.solid) || slowMenu[0];
+                        const slowTag = slowClaim && !slowClaim.solid ? ' (estimasi, sampel kecil)' : '';
+                        if (slowClaim) menu += ` ${slowPhrase(slowClaim)}${slowTag}, paling lambat.${slowMenu[1] && slowMenu[1] !== slowClaim ? ` Lalu ${slowPhrase(slowMenu[1])}.` : ''}`;
                         if (deadPromo.length) menu += ` Menu mati (0 laku), saran promo: ${deadPromo.slice(0, 4).join(', ')}.`;
                         if (deadCoret.length) menu += ` Pertimbangkan coret: ${deadCoret.slice(0, 4).join(', ')}.`;
                         lines.push(menu);
@@ -380,7 +416,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                     const worst = rated.length ? rated.reduce((a, b) => b.pct - a.pct <= 0 ? b : a) : null;
                     const peakTxt = stats.peakHour ? ` Jam tersibuk ${String(stats.peakHour.h).padStart(2, '0')}.00 (rata ${fmt(stats.peakHour.avgWait)}, ${stats.peakHour.n} pesanan).` : '';
                     const trendTxt = rated.length > 1 && best && worst && best.day !== worst.day ? ` Terbaik ${best.day} (${best.pct}%), terlemah ${worst.day} (${worst.pct}%).` : '';
-                    if (timing.n_ready) lines.push(`3. Kecepatan vs target: rata-rata ${fmt(timing.avg_ready)} (tipikal ${fmt(medianReady)}), tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready}).${peakTxt}${trendTxt}${timing.avg_ready > targetMin * 60000 ? ' Butuh evaluasi dapur/jam ramai.' : ' Kecepatan bagus — pertahankan.'}`);
+                    if (timing.n_ready) lines.push(`3. Kecepatan vs target: rata-rata ${fmt(timing.avg_ready)} (tipikal ${fmt(medianReady)}), tercapai ${pctOn}% dari target (makanan ${tg.food} mnt, minuman ${tg.drink} mnt; ${nOn}/${timing.n_ready}).${peakTxt}${trendTxt}${timing.avg_ready > targetMin * 60000 ? ' Butuh evaluasi dapur/jam ramai.' : ' Kecepatan bagus — pertahankan.'}`);
                     else lines.push(`3. Kecepatan: belum ada pesanan yang sampai siap. Target ${targetMin} mnt belum terukur.`);
                     if (paymix.length) {
                         const top = paymix[0], share = agg.orders ? Math.round(top.n / agg.orders * 100) : 0;
@@ -388,7 +424,7 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                         lines.push(`4. Bayar: ${top.payment} dominan ${share}% (${top.n}x)${rest ? ', lalu ' + rest : ''}.${/tunai/i.test(top.payment) && share >= 50 ? ' Dorong QRIS/bank.' : ''}`);
                     } else lines.push(`4. Bayar: belum ada data.`);
                     const recs = [];
-                    if (slowMenu.length && slowMenu[0].avgWait > targetMin * 60000) recs.push(`percepat ${slowMenu[0].name} (rata-rata ${fmt(slowMenu[0].avgWait)})`);
+                    if (slowMenu.length && slowMenu[0].avgWait > targetMin * 60000) recs.push(`percepat ${slowMenu[0].name} (rata-rata ${fmt(slowMenu[0].avgWait)}${slowMenu[0].solid ? '' : ', estimasi'})`);
                     if (deadPromo.length) recs.push(`promo ${deadPromo[0]} (0 laku)`);
                     else if (deadCoret.length) recs.push(`coret ${deadCoret[0]} (tidak laku)`);
                     if (pctOn < 85 && timing.n_ready) recs.push(stats.peakHour ? `tambah orang jam ${String(stats.peakHour.h).padStart(2, '0')}.00 (rata ${fmt(stats.peakHour.avgWait)})` : `kejar target ${targetMin} mnt di jam ramai`);
@@ -409,14 +445,14 @@ export function createService(db, { clock = () => Date.now(), setupKey = '', tru
                         lambat: slowMenu.slice(0, 5).map(s => `${s.name} rata-rata ${fmt(s.avgWait)} (${s.n} pesanan)`),
                         matiPromo: deadPromo.slice(0, 8),
                         matiCoret: deadCoret.slice(0, 8),
-                        kecepatan: `rata ${fmt(timing.avg_ready)}, tipikal ${fmt(medianReady)}, tercapai ${pctOn}% dari target ${targetMin} mnt (${timing.n_on}/${timing.n_ready})`,
+                        kecepatan: `rata ${fmt(timing.avg_ready)}, tipikal ${fmt(medianReady)}, tercapai ${pctOn}% dari target (makanan ${tg.food} mnt, minuman ${tg.drink} mnt; ${nOn}/${timing.n_ready})`,
                         jamRamai: stats.peakHour ? `jam ${String(stats.peakHour.h).padStart(2, '0')}.00 rata ${fmt(stats.peakHour.avgWait)} dari ${stats.peakHour.n} pesanan` : 'belum ada data siap',
                         trenTarget: targetTrend.filter(t => t.pct != null).map(t => `${t.day} ${t.pct}%`).join(', ') || 'satu hari',
                         bayar: paymix.slice(0, 4).map(p => `${p.payment} ${p.n}x`),
                     };
                     const res = await ai.run('@cf/meta/llama-3.1-8b-instruct', { messages: [
                         { role: 'system', content: 'Kamu analis kafe. Jawab Bahasa Indonesia. Tepat 5 baris bernomor 1. sampai 5. Maksimal 200 kata. Jangan sebut nama pelanggan. Jangan mengarang angka — pakai data user. Struktur wajib: 1) tren penjualan (omzet, jumlah pesanan, naik/turun), 2) menu andalan + menu lambat (sebut "rata-rata X mnt, paling lambat") + menu mati 0 laku dengan saran promo atau coret, 3) kecepatan vs target — wajib frasa "tercapai N% dari target M mnt" plus jam tersibuk dan hari terbaik/terlemah bila ada datanya, 4) metode pembayaran, 5) tiga saran konkret (satu harus soal jam tersibuk bila kecepatan di bawah target). Jangan tambah baris ke-6.' },
-                        { role: 'user', content: `Fakta: ${JSON.stringify(facts)}. Tulis 5 baris sesuai struktur. Baris 3 wajib memuat: tercapai ${pctOn}% dari target ${targetMin} mnt.` },
+                        { role: 'user', content: `Fakta: ${JSON.stringify(facts)}. Tulis 5 baris sesuai struktur. Baris 3 wajib memuat: tercapai ${pctOn}% dari target (makanan ${tg.food} mnt, minuman ${tg.drink} mnt).` },
                     ] });
                     narrative = String(res?.response || '').slice(0, 2000);
                     if (!narrative) throw new Error('empty');

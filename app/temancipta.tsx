@@ -13,11 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { queueNumber } from '@/core/security.mjs';
 
 type User = { id: string; name: string; username: string; role: string; active?: number };
-type Config = { name: string; timezone: string; footer: string; target_ready_min?: number };
+type Config = { name: string; timezone: string; footer: string; target_ready_min?: number; target_food_min?: number; target_drink_min?: number; tax_pct?: number; service_pct?: number };
 type Item = { id: string; name: string; price: number; quantity: number };
-type Product = { id: string; name: string; category: string; price: number; active: number };
+type Product = { id: string; name: string; category: string; price: number; active: number; img?: string };
 type Payment = { id: string; name: string; active: number };
-type Order = { id: string; day: string; number: number; customer: string; mode: string; items: Item[]; note: string; total: number; payment: string; status: string; created_at: number; version: number; cancel_reason?: string; prepared_at?: number | null; ready_at?: number | null; completed_at?: number | null };
+type Order = { id: string; day: string; number: number; customer: string; mode: string; items: Item[]; note: string; total: number; payment: string; status: string; created_at: number; version: number; cancel_reason?: string; prepared_at?: number | null; ready_at?: number | null; completed_at?: number | null; discount_rp?: number; service_rp?: number; tax_rp?: number };
 type Board = { orders: Order[]; stats?: { total: number; completed: number; sales: number }; latestEvent: number; day: string; serverTime: number };
 type Expense = { id: string; day: string; category: string; note: string; amount: number; created_at: number; author?: string };
 
@@ -56,6 +56,15 @@ function Empty({ title, children }: { title: string; children?: React.ReactNode 
   return <div className="empty"><Ticket size={30} /><h3>{title}</h3><p>{children}</p></div>;
 }
 function Status({ status }: { status: string }) { return <span className={'status ' + status}>{statusNames[status]}</span>; }
+function downloadCSV(name: string, rows: (string | number)[][]) {
+  const esc = (v: string | number) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const blob = new Blob(['\ufeff' + rows.map(r => r.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  void 0;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const isFoodCategory = (c?: string) => /makan|roti|kue|snack|food|bakery|cake|pastry|dessert/i.test(c || '');
 function Brand({ name, sub }: { name: string; sub?: string }) {
   const initial = (name.trim()[0] || 'T').toUpperCase();
   return (
@@ -117,7 +126,7 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
 
   const loadProducts = useCallback(async () => { const d = await api('products'); setProducts(d.products); }, []);
   const loadPayments = useCallback(async () => { try { const d = await api('payments'); setPayments(d.payments); } catch { } }, []);
-  useEffect(() => { if (user && ['admin', 'cashier'].includes(user.role)) loadProducts().catch(e => setError(e.message)); }, [user, loadProducts]);
+  useEffect(() => { if (user && ['admin', 'cashier', 'kitchen'].includes(user.role)) loadProducts().catch(e => setError(e.message)); }, [user, loadProducts]);
   useEffect(() => { if (user && ['admin', 'cashier'].includes(user.role)) loadPayments(); }, [user, loadPayments]);
 
   const message = (s: string) => { setNotice(s); setError(''); };
@@ -186,8 +195,8 @@ export default function Temancipta({ view = 'kasir' }: { view?: string }) {
           try { d = await perform('orders', b); } catch (e) { await loadProducts().catch(() => { }); throw e; }
           setReceipt(d.order); message(`${queueNumber(d.order.number)} tersimpan. Struk siap.`); return d;
         }} onReceipt={setReceipt} />}
-        {actualView === 'dapur' && <Kitchen board={board} config={config} user={user} connected={connected} onAction={b => perform('orders/action', b)} onReceipt={setReceipt} />}
-        {actualView === 'riwayat' && <History config={config} day={board?.day || ''} onReceipt={setReceipt} />}
+        {actualView === 'dapur' && <Kitchen board={board} config={config} products={products} user={user} connected={connected} onAction={b => perform('orders/action', b)} onReceipt={setReceipt} />}
+        {actualView === 'riwayat' && <History config={config} products={products} day={board?.day || ''} onReceipt={setReceipt} />}
         {actualView === 'keuangan' && isAdmin && <Finance config={config} day={board?.day || ''} onSaved={(s) => message(s)} />}
         {actualView === 'pengaturan' && (isAdmin || user.role === 'cashier') && <SettingsPanel config={config} products={products} payments={payments} limited={!isAdmin} onSave={async (path, b) => {
           const d = await perform(path, b);
@@ -294,6 +303,7 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
   const [payment, setPayment] = useState('Tunai');
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [discount, setDiscount] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { setCart(items => items.map(i => { const p = products.find(p => p.id === i.id); return p ? { ...i, price: p.price, name: p.name } : i; })); }, [products]);
   const pending = useRef<{ id: string; payload: string } | null>(null);
@@ -303,6 +313,10 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
   const add = (p: Product) => setCart(c => { const old = c.find(i => i.id === p.id); return old ? c.map(i => i.id === p.id ? { ...i, quantity: Math.min(i.quantity + 1, 99) } : i) : [...c, { ...p, quantity: 1 }]; });
   const total = cart.reduce((s, i) => s + i.quantity * i.price, 0);
   const count = cart.reduce((s, i) => s + i.quantity, 0);
+  const disc = Math.min(total, Math.max(0, Math.floor(Number(discount) || 0)));
+  const svcPct = config.service_pct || 0, taxPct = config.tax_pct || 0;
+  const svc = Math.round((total - disc) * svcPct / 100), tax = Math.round((total - disc + svc) * taxPct / 100);
+  const grand = total - disc + svc + tax;
   const stats = [
     ['Hari ini', board?.stats?.total || 0, ReceiptText],
     ['Antre', board?.orders.filter(o => o.status !== 'ready').length || 0, Clock],
@@ -351,7 +365,7 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
               const { Icon, cls } = menuIcon(p);
               return (
                 <button disabled={busy} className={'menu-card' + (qty ? ' in-cart' : '')} key={p.id} onClick={() => add(p)} style={{ animationDelay: `${Math.min(i * 35, 350)}ms` }}>
-                  <span className={'menu-symbol ' + cls}><Icon size={28} /></span>
+                  <span className={'menu-symbol ' + cls}><Icon size={28} />{p.img ? <img src={p.img} alt="" loading="lazy" className="menu-photo" onError={e => e.currentTarget.remove()} /> : null}</span>
                   <span className="menu-category">{p.category}</span>
                   <strong>{p.name}</strong>
                   <span className="menu-bottom">{money(p.price)}<span className="add-icon"><Plus size={16} /></span></span>
@@ -378,10 +392,10 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
             e.preventDefault();
             if (!cart.length || busy) return;
             setBusy(true);
-            const data = { customer: customer.trim(), mode, payment: method, note, expectedTotal: total, items: cart.map(i => ({ id: i.id, quantity: i.quantity })) };
+            const data = { customer: customer.trim(), mode, payment: method, note, discount: disc, expectedTotal: grand, items: cart.map(i => ({ id: i.id, quantity: i.quantity })) };
             const payload = JSON.stringify(data);
             if (!pending.current || pending.current.payload !== payload) pending.current = { id: crypto.randomUUID(), payload };
-            try { await onSave({ ...data, id: pending.current.id }); setCart([]); setCustomer(''); setNote(''); pending.current = null; }
+            try { await onSave({ ...data, id: pending.current.id }); setCart([]); setCustomer(''); setNote(''); setDiscount(''); pending.current = null; }
             catch { } finally { setBusy(false); }
           }}>
             <fieldset disabled={busy}>
@@ -401,10 +415,17 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
               </div>
               <label>Catatan<Textarea maxLength={300} rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="cth: less ice" /></label>
               <label>Bayar pakai<SelectField label="Pembayaran" value={isBank ? 'Kartu' : method} onChange={choosePay} options={[['Tunai', 'Tunai'], ['QRIS', 'QRIS'], ['Kartu', 'Kartu / Bank']]} /></label>
+              <label>Diskon (Rp)<Input type="number" min={0} max={total} value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></label>
+              {(disc > 0 || svc > 0 || tax > 0) && <div className="breakdown">
+                <div><span>Subtotal</span><b>{money(total)}</b></div>
+                {disc > 0 && <div><span>Diskon</span><b>-{money(disc)}</b></div>}
+                {svc > 0 && <div><span>Service {svcPct}%</span><b>{money(svc)}</b></div>}
+                {tax > 0 && <div><span>Pajak {taxPct}%</span><b>{money(tax)}</b></div>}
+              </div>}
               {/qris/i.test(method) && (
                 <div className="qris-box">
                   {!qrisMissing ? <img src="/qris.png" alt="QRIS kafe" className="qris-img" onError={() => setQrisMissing(true)} /> : <p className="muted">QR belum dipasang — simpan file public/qris.png lalu deploy ulang.</p>}
-                  <p><strong>{money(total)}</strong> · Pelanggan scan untuk bayar</p>
+                  <p><strong>{money(grand)}</strong> · Pelanggan scan untuk bayar</p>
                   <Button type="button" variant="outline" onClick={() => setQrisOpen(true)}><Maximize size={15} /> Lihat QR besar</Button>
                 </div>
               )}
@@ -412,11 +433,11 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
                 <div className="bank-box">
                   <p>Transfer ke <strong>{bankName}</strong></p>
                   <p className="mono">{bankNumber || method}</p>
-                  <p><strong>{money(total)}</strong></p>
+                  <p><strong>{money(grand)}</strong></p>
                   <Button type="button" variant="outline" onClick={() => setBankOpen(true)}>Detail transfer</Button>
                 </div>
               )}
-              <div className="total"><span>Total</span><strong>{money(total)}</strong></div>
+              <div className="total"><span>Total</span><strong>{money(grand)}</strong></div>
               <Button type="submit" className="full submit-order" disabled={!cart.length || !customer.trim() || busy || !connected}>{busy ? <Loader2 className="spin" /> : <ReceiptText />}{busy ? 'Menyimpan…' : 'Simpan pesanan'}<ArrowRight /></Button>
             </fieldset>
           </form>
@@ -424,7 +445,7 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
       </div>
       <Dialog open={qrisOpen} onOpenChange={setQrisOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Scan QRIS</DialogTitle><DialogDescription>{money(total)} · pastikan nominal sesuai</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Scan QRIS</DialogTitle><DialogDescription>{money(grand)} · pastikan nominal sesuai</DialogDescription></DialogHeader>
           {!qrisMissing ? <img src="/qris.png" alt="QRIS kafe" className="qris-big" onError={() => setQrisMissing(true)} /> : <p className="muted">QR belum dipasang — simpan file public/qris.png lalu deploy ulang.</p>}
           <Button onClick={() => setQrisOpen(false)}>Tutup</Button>
         </DialogContent>
@@ -454,7 +475,7 @@ function Cashier({ products, payments, board, config, connected, onSave, onRecei
   );
 }
 
-function Kitchen({ board, config, user, connected, onAction, onReceipt }: { board: Board | null; config: Config; user: User; connected: boolean; onAction: (b: any) => Promise<any>; onReceipt: (o: Order) => void }) {
+function Kitchen({ board, config, products, user, connected, onAction, onReceipt }: { board: Board | null; config: Config; products: Product[]; user: User; connected: boolean; onAction: (b: any) => Promise<any>; onReceipt: (o: Order) => void }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -462,8 +483,10 @@ function Kitchen({ board, config, user, connected, onAction, onReceipt }: { boar
   const [cancel, setCancel] = useState<Order | null>(null);
   const [reason, setReason] = useState('');
   const targetMin = config.target_ready_min || 10;
+  const foodIds = new Set((products || []).filter(p => isFoodCategory(p.category)).map(p => p.id));
+  const orderTarget = (o: Order) => o.items.some(i => foodIds.has(i.id)) ? (config.target_food_min || 15) : (config.target_drink_min || 5);
   const elapsed = (o: Order) => Math.max(0, Math.floor(((board?.serverTime || o.created_at) - o.created_at) / 60000));
-  const overCount = board?.orders.filter(o => o.status !== 'ready' && elapsed(o) > targetMin).length || 0;
+  const overCount = board?.orders.filter(o => o.status !== 'ready' && elapsed(o) > orderTarget(o)).length || 0;
   const q = query.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const filtered = board?.orders.filter(o => (filter === 'all' || o.status === filter) && (!q || o.customer.toLowerCase().includes(query.trim().toLowerCase()) || queueNumber(o.number).toLowerCase().replace(/[^a-z0-9]/g, '').includes(q) || String(o.number).includes(q))) || [];
   const pages = Math.max(1, Math.ceil(filtered.length / 12));
@@ -486,15 +509,16 @@ function Kitchen({ board, config, user, connected, onAction, onReceipt }: { boar
         </Tabs>
         <div className="search kit-search"><Search size={17} /><Input aria-label="Cari pesanan" placeholder="Cari nama / nomor…" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} />{query && <button className="kit-clear" aria-label="Hapus pencarian" onClick={() => setQuery('')}><X size={15} /></button>}</div>
       </div>
-      {!!overCount && <p className="banner error kit-warn" role="alert"><Clock size={17} /> {overCount} pesanan lewat target {targetMin} mnt — dahulukan yang bertanda merah.</p>}
+      {!!overCount && <p className="banner error kit-warn" role="alert"><Clock size={17} /> {overCount} pesanan lewat target (makanan {config.target_food_min || 15} mnt, minuman {config.target_drink_min || 5} mnt) — dahulukan yang bertanda merah.</p>}
       <div className="kitchen-grid">
         {filtered.slice((current - 1) * 12, current * 12).map(o => {
           const mins = elapsed(o);
-          const over = o.status !== 'ready' && mins > targetMin;
-          const soon = !over && o.status !== 'ready' && mins >= Math.ceil(targetMin * 0.7);
+          const lim = orderTarget(o);
+          const over = o.status !== 'ready' && mins > lim;
+          const soon = !over && o.status !== 'ready' && mins >= Math.ceil(lim * 0.7);
           return (
           <article className={'order-card ' + o.status + (over ? ' over' : soon ? ' soon' : '')} key={o.id}>
-            <header><strong>{queueNumber(o.number)}</strong>{o.day !== board?.day && <span className="day-chip" title={'Antrean hari ' + o.day}>{o.day.slice(5)}</span>}<span className="kit-tags"><Status status={o.status} />{over && <span className="over-badge">LEWAT +{mins - targetMin} mnt</span>}{soon && <span className="soon-badge">{mins} mnt</span>}</span></header>
+            <header><strong>{queueNumber(o.number)}</strong>{o.day !== board?.day && <span className="day-chip" title={'Antrean hari ' + o.day}>{o.day.slice(5)}</span>}<span className="kit-tags"><Status status={o.status} />{over && <span className="over-badge">LEWAT +{mins - lim} mnt</span>}{soon && <span className="soon-badge">{mins}/{lim} mnt</span>}</span></header>
             <h2>{o.customer}</h2>
             <p className="order-meta">{o.mode === 'takeaway' ? 'Bawa pulang' : 'Di sini'} · {time(o.created_at, config.timezone)} · {mins} mnt</p>
             <ul>{o.items.map(i => <li key={i.id}><b>{i.quantity}×</b><span>{i.name}</span></li>)}</ul>
@@ -536,6 +560,11 @@ function Receipt({ order: o, config }: { order: Order; config: Config }) {
       <p>{o.day} · {time(o.created_at, config.timezone)}</p>
       <div className="receipt-number"><span>ANTREAN</span><strong>{queueNumber(o.number)}</strong><h3>{o.customer}</h3><p>{o.mode === 'takeaway' ? 'BAWA PULANG' : 'DI SINI'}</p></div>
       <div className="receipt-items">{o.items.map(i => <div key={i.id}><span>{i.quantity}× {i.name}</span><b>{money(i.quantity * i.price)}</b></div>)}</div>
+      {!!(o.discount_rp || o.service_rp || o.tax_rp) && <div className="receipt-items">
+        {!!o.discount_rp && <div><span>Diskon</span><b>-{money(o.discount_rp)}</b></div>}
+        {!!o.service_rp && <div><span>Service</span><b>{money(o.service_rp)}</b></div>}
+        {!!o.tax_rp && <div><span>Pajak</span><b>{money(o.tax_rp)}</b></div>}
+      </div>}
       {o.note && <p className="receipt-note">Catatan: {o.note}</p>}
       <div className="receipt-total"><strong>TOTAL</strong><strong>{money(o.total)}</strong></div>
       <p>{{ cash: 'Tunai', qris: 'QRIS', card: 'Kartu' }[o.payment] || o.payment} · <b>{statusNames[o.status]}</b></p>
@@ -598,6 +627,16 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
     try { await api('expenses/delete', { id }); await load(); onSaved('Pengeluaran dihapus.'); }
     catch (e) { setError((e as Error).message); }
   };
+  const exportCSV = () => {
+    if (!data) return;
+    downloadCSV(`keuangan-${from}-${to}.csv`, [
+      ['Hari', 'Masuk', 'Keluar', 'Laba'],
+      ...days.map(d => [d, salesByDay[d] || 0, spentByDay[d] || 0, (salesByDay[d] || 0) - (spentByDay[d] || 0)] as (string | number)[]),
+      [], ['TOTAL', totalSales, totalSpent, profit], [],
+      ['Pengeluaran: Tanggal', 'Kategori', 'Keterangan', 'Jumlah'],
+      ...(data.expenses || []).map((x: Expense) => [x.day, expenseNames[x.category] || x.category, x.note, x.amount] as (string | number)[]),
+    ]);
+  };
   return (
     <section className="finance">
       <div className="finance-range">
@@ -607,6 +646,7 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
           <Button variant="outline" size="sm" onClick={() => { setFrom(day); setTo(day); }}>Hari ini</Button>
           <Button variant="outline" size="sm" onClick={() => { const d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - 6); setFrom(d.toISOString().slice(0, 10)); setTo(day); }}>7 hari</Button>
           <Button variant="outline" size="sm" onClick={() => { setFrom(day.slice(0, 7) + '-01'); setTo(day); }}>Bulan ini</Button>
+          <Button variant="outline" size="sm" onClick={exportCSV} disabled={loading || !data}>CSV</Button>
         </div>
       </div>
       {error && <p className="banner error">{error}</p>}
@@ -725,7 +765,7 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
           <div className="ai-kpis">
             <div className="ai-kpi k-andalan"><span className="k-ico"><Trophy size={16} /></span><div><small>Andalan</small><strong>{ai.topItems?.[0] ? `${ai.topItems[0].name} · ${ai.topItems[0].qty}x` : '–'}</strong></div></div>
             <div className="ai-kpi k-lambat"><span className="k-ico"><Timer size={16} /></span><div><small>Paling lambat</small><strong>{ai.slowMenu?.[0] ? `${ai.slowMenu[0].name} · ${fmtDur(ai.slowMenu[0].avgWait)}` : '–'}</strong></div></div>
-            <div className="ai-kpi k-target"><span className="k-ico"><Target size={16} /></span><div><small>Target {ai.targetMin} mnt</small><strong>{ai.nReady ? `${ai.pctOnTarget}% tercapai (${ai.nOnTarget}/${ai.nReady})` : 'Belum terukur'}</strong></div></div>
+            <div className="ai-kpi k-target"><span className="k-ico"><Target size={16} /></span><div><small>Makanan {ai.targetFood} · minuman {ai.targetDrink} mnt</small><strong>{ai.nReady ? `${ai.pctOnTarget}% tercapai (${ai.nOnTarget}/${ai.nReady})` : 'Belum terukur'}</strong></div></div>
             <div className="ai-kpi k-mati"><span className="k-ico"><Ban size={16} /></span><div><small>Menu mati</small><strong>{ai.deadMenu?.length || 0} item · 0 laku</strong></div></div>
           </div>
           <div className="ai-lines">{ai.narrative.split('\n').filter(Boolean).slice(0, 5).map((line: string, i: number) => {
@@ -756,7 +796,7 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
             {!!ai.slowMenu?.length && <div className="ai-card"><h3><Timer size={15} /> Menu paling lambat</h3><p className="muted sm">Rata-rata pesan→siap per menu. Target {ai.targetMin} mnt.</p><div className="slow-list">{(() => { const mx = Math.max(1, ...ai.slowMenu.map((s: any) => s.avgWait)); return ai.slowMenu.map((s: any, i: number) => {
               const over = ai.targetMin && s.avgWait > ai.targetMin * 60000;
               return <div className={'slow-row' + (i === 0 ? ' worst' : '')} key={s.name} style={{ animationDelay: `${i * 0.05}s` }}>
-                <div className="slow-main"><strong>{s.name}</strong><div className="slow-bar"><i style={{ width: `${Math.max(4, (s.avgWait / mx) * 100)}%` }} /></div><small>{s.n}x pesanan · terlama {fmtDur(s.maxWait)}</small></div>
+                <div className="slow-main"><strong>{s.name}</strong><div className="slow-bar"><i style={{ width: `${Math.max(4, (s.avgWait / mx) * 100)}%` }} /></div><small>{s.n}x pesanan · terlama {fmtDur(s.maxWait)}{s.solid ? '' : ' · estimasi'}</small></div>
                 <b>{fmtDur(s.avgWait)}</b>
                 {i === 0 ? <span className="chip warn">paling lambat</span> : over ? <span className="chip">di atas target</span> : <span className="chip ok">aman</span>}
               </div>;
@@ -915,13 +955,25 @@ function Display({ config, board, connected, onLogout }: { config: Config; board
   );
 }
 
-function History({ config, day, onReceipt }: { config: Config; day: string; onReceipt: (o: Order) => void }) {
+function History({ config, products, day, onReceipt }: { config: Config; products: Product[]; day: string; onReceipt: (o: Order) => void }) {
   const [date, setDate] = useState(day);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [dlBusy, setDlBusy] = useState(false);
+  const exportCSV = async () => {
+    if (!date || dlBusy) return;
+    setDlBusy(true);
+    try {
+      const first = await api(`history?day=${date}&page=1&search=${encodeURIComponent(search)}`);
+      const pages = Math.max(1, Math.ceil((first.count || 0) / 30));
+      let all: Order[] = first.orders;
+      for (let p = 2; p <= Math.min(pages, 10); p++) { const d = await api(`history?day=${date}&page=${p}&search=${encodeURIComponent(search)}`); all = all.concat(d.orders); }
+      downloadCSV(`riwayat-${date}.csv`, [['Tanggal', 'Antrean', 'Pelanggan', 'Jenis', 'Item', 'Total', 'Diskon', 'Bayar', 'Status', 'Menit siap'], ...all.map(o => [o.day, queueNumber(o.number), o.customer, o.mode, o.items.map(i => `${i.quantity}x ${i.name}`).join('; '), o.total, o.discount_rp || 0, o.payment, statusNames[o.status] || o.status, o.ready_at ? Math.round((o.ready_at - o.created_at) / 60000) : ''])]);
+    } catch (e) { setError((e as Error).message); } finally { setDlBusy(false); }
+  };
   useEffect(() => { if (!date && day) setDate(day); }, [day, date]);
   useEffect(() => {
     if (!date) return;
@@ -933,6 +985,8 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
     return () => { alive = false; clearTimeout(t); };
   }, [date, search, page]);
   const targetMin = data?.summary.targetMin || config.target_ready_min || 10;
+  const foodIdsH = new Set((products || []).filter(p => isFoodCategory(p.category)).map(p => p.id));
+  const histTarget = (o: Order) => o.items.some(i => foodIdsH.has(i.id)) ? (data?.summary.targetFood || config.target_food_min || 15) : (data?.summary.targetDrink || config.target_drink_min || 5);
   const nReady = data?.summary.nReady || 0;
   const pctOn = nReady ? Math.round((data.summary.nOnTarget || 0) / nReady * 100) : 0;
   const maxWait = Math.max(1, ...(data?.summary.slowest || []).map((s: any) => s.wait || 0), ...(data?.summary.perCustomer || []).map((c: any) => c.avgwait || 0));
@@ -941,7 +995,8 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
       <div className="history-toolbar">
         <label>Tanggal<Input aria-label="Tanggal" type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} /></label>
         <div className="search"><Search size={17} /><Input aria-label="Cari" placeholder="Nama / nomor" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></div>
-        {!!nReady && <div className="hist-target"><Target size={15} /><span>Target ≤ {targetMin} mnt · <b>{pctOn}%</b> tercapai ({data.summary.nOnTarget}/{nReady})</span></div>}
+        <Button variant="outline" size="sm" onClick={exportCSV} disabled={dlBusy || loading || !data?.count}>{dlBusy ? <Loader2 className="spin" size={15} /> : <ArrowRight size={15} />}CSV</Button>
+        {!!nReady && <div className="hist-target"><Target size={15} /><span>Makanan ≤ {data.summary.targetFood || 15} · minuman ≤ {data.summary.targetDrink || 5} mnt · <b>{pctOn}%</b> tercapai ({data.summary.nOnTarget}/{nReady})</span></div>}
       </div>
       {error && <p className="banner error">{error}</p>}
       <div className="stats-row hist-stats">
@@ -964,6 +1019,20 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
                   <div className="slow-bar"><i style={{ width: `${Math.max(6, (s.wait / maxWait) * 100)}%` }} /></div>
                 </div>;
               })}</div>
+            </div>
+          )}
+          {!!data?.summary.perStaff?.length && (
+            <div className="ai-card hist-card">
+              <h3><ShieldCheck size={15} /> Kecepatan per petugas</h3>
+              <p className="muted sm">Rata pesan→siap dari pesanan yang dibuat tiap akun.</p>
+              <div className="rank-list cust-list">{data.summary.perStaff.map((c: any, i: number) => (
+                <div className="rank-row cust-row" key={c.id} style={{ animationDelay: `${i * 0.04}s` }}>
+                  <span className={'rank r' + Math.min(i + 1, 3)}>{i + 1}</span>
+                  <div className="rank-main"><strong>{c.name}</strong><small>{c.n}x pesanan · omzet {money(c.sales)}</small><div className="qty-bar"><i style={{ width: `${Math.max(6, (c.avgwait / maxWait) * 100)}%` }} /></div></div>
+                  <div className="cust-avg"><b>{fmtDur(c.avgwait)}</b><small>rata siap</small></div>
+                  <div className="cust-spent"><b>{c.n}x</b><small>pesanan</small></div>
+                </div>
+              ))}</div>
             </div>
           )}
           {!!data?.summary.perCustomer?.length && (
@@ -1001,7 +1070,8 @@ function History({ config, day, onReceipt }: { config: Config; day: string; onRe
         <div className="section-top"><h2>Pesanan hari ini</h2><span className="muted">{data?.count || 0} catatan</span></div>
         {loading ? <p className="loading-text">Memuat…</p> : !data?.orders.length ? <Empty title="Kosong">Ganti tanggal / kata kunci.</Empty> : data.orders.map((o: Order, i: number) => {
           const wait = o.ready_at ? o.ready_at - o.created_at : null;
-          const over = wait != null && wait > targetMin * 60000;
+          const lim = histTarget(o);
+          const over = wait != null && wait > lim * 60000;
           return (
             <article className={'hist-row st-' + o.status + (over ? ' over' : '')} key={o.id} style={{ animationDelay: `${Math.min(i, 12) * 0.03}s` }}>
               <div className="hist-q"><strong>{queueNumber(o.number)}</strong><small>{time(o.created_at, config.timezone)}</small></div>
@@ -1067,6 +1137,12 @@ function SettingsPanel({ config, products, payments, limited, onSave, onLogout }
             <label>Nama kafe<Input name="name" defaultValue={config.name} maxLength={80} required /></label>
             <label>Teks struk & TV<Textarea name="footer" defaultValue={config.footer} maxLength={200} /></label>
             <label>Target pesan → siap (menit)<Input name="target" type="number" min={1} max={180} defaultValue={config.target_ready_min ?? 10} required /></label>
+            <div className="set-2col">
+              <label>Target makanan (mnt)<Input name="targetFood" type="number" min={1} max={180} defaultValue={config.target_food_min ?? 15} /></label>
+              <label>Target minuman (mnt)<Input name="targetDrink" type="number" min={1} max={180} defaultValue={config.target_drink_min ?? 5} /></label>
+              <label>Service (%)<Input name="servicePct" type="number" min={0} max={50} defaultValue={config.service_pct ?? 0} /></label>
+              <label>Pajak (%)<Input name="taxPct" type="number" min={0} max={50} defaultValue={config.tax_pct ?? 0} /></label>
+            </div>
             <div className="info-box"><Clock size={20} /><div><strong>Nomor reset 00.00</strong><p>{config.timezone} · kembali ke A0001 tiap tanggal baru.</p></div></div>
             <Button disabled={busy}>Simpan</Button>
           </form>
@@ -1119,6 +1195,7 @@ function SettingsPanel({ config, products, payments, limited, onSave, onLogout }
             <label>Nama<Input name="name" defaultValue={edit.name} required maxLength={80} /></label>
             <label>Kategori<Input name="category" defaultValue={edit.category} required maxLength={40} /></label>
             <label>Harga (Rp)<Input type="number" name="price" defaultValue={edit.price} min={0} max={100000000} step={1} required /></label>
+            <label>Foto (URL https, opsional)<Input name="img" defaultValue={(edit as Product).img || ''} maxLength={500} placeholder="https://…" /></label>
             <div className="switch-row"><Switch id="product-active" checked={!!edit.active} onCheckedChange={active => setEdit({ ...edit, active: active ? 1 : 0 })} /><Label htmlFor="product-active">Aktif</Label></div>
             <Button disabled={busy}>Simpan</Button>
           </form>}
