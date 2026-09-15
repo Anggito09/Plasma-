@@ -609,7 +609,6 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
   const totalSales = Object.values(salesByDay).reduce((a, b) => a + b, 0);
   const totalSpent = Object.values(spentByDay).reduce((a, b) => a + b, 0);
   const profit = totalSales - totalSpent;
-  const maxBar = Math.max(1, ...days.map(d => Math.max(salesByDay[d] || 0, spentByDay[d] || 0)));
   const shortRp = (n: number) => n >= 1000000 ? `Rp${(n / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 })}jt` : n >= 1000 ? `Rp${Math.round(n / 1000)}rb` : money(n);
   const catIcon: Record<string, any> = { bahan: ShoppingBag, operasional: Store, gaji: Users, lainnya: Archive };
   const save = async (e: React.FormEvent) => {
@@ -703,22 +702,32 @@ function Finance({ config, day, onSaved }: { config: Config; day: string; onSave
             </div>
           ) : (
             <div className="vbars-wrap">
-              <div className="vbars">
-                {days.map(d => {
-                  const s = salesByDay[d] || 0, o = spentByDay[d] || 0, net = s - o;
-                  return (
-                    <div className="vbar-col" key={d} title={`${d}: masuk ${money(s)}, keluar ${money(o)}, laba ${money(net)}`}>
-                      <div className="vbar-pair">
-                        <div className="vbar in" style={{ height: `${Math.max(3, (s / maxBar) * 100)}%` }} />
-                        <div className="vbar out" style={{ height: `${Math.max(3, (o / maxBar) * 100)}%` }} />
-                      </div>
-                      <span className={net >= 0 ? 'pos' : 'neg'}>{d.slice(5)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="legend"><i className="in" />Masuk<i className="out" />Keluar<i className="net" />Laba = selisih</p>
-              <div className="net-strip">{days.map(d => { const net = (salesByDay[d] || 0) - (spentByDay[d] || 0); return <b key={d} className={net >= 0 ? 'pos' : 'neg'} title={`${d}: ${money(net)}`}>{shortRp(net)}</b>; })}</div>
+              {(() => {
+                const weekly = days.length > 14;
+                const gs = weekly
+                  ? (() => { const out = []; for (let i = 0; i < days.length; i += 7) { const ss = days.slice(i, i + 7); out.push({ key: ss[0], label: `${ss[0].slice(5)}–${ss[ss.length - 1].slice(5)}`, tip: `${ss[0]} s/d ${ss[ss.length - 1]}`, sales: ss.reduce((a, d) => a + (salesByDay[d] || 0), 0), spent: ss.reduce((a, d) => a + (spentByDay[d] || 0), 0) }); } return out; })()
+                  : days.map(d => ({ key: d, label: d.slice(5), tip: d, sales: salesByDay[d] || 0, spent: spentByDay[d] || 0 }));
+                const gmax = Math.max(1, ...gs.map(g => Math.max(g.sales, g.spent)));
+                return (<>
+                  {weekly && <p className="muted sm">Dikelompokkan per minggu (rentang &gt; 14 hari).</p>}
+                  <div className="vbars">
+                    {gs.map(g => {
+                      const net = g.sales - g.spent;
+                      return (
+                        <div className="vbar-col" key={g.key} title={`${g.tip}: masuk ${money(g.sales)}, keluar ${money(g.spent)}, laba ${money(net)}`}>
+                          <div className="vbar-pair">
+                            <div className="vbar in" style={{ height: `${Math.max(3, (g.sales / gmax) * 100)}%` }} />
+                            <div className="vbar out" style={{ height: `${Math.max(3, (g.spent / gmax) * 100)}%` }} />
+                          </div>
+                          <span className={net >= 0 ? 'pos' : 'neg'}>{g.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="legend"><i className="in" />Masuk<i className="out" />Keluar<i className="net" />Laba = selisih</p>
+                  <div className="net-strip">{gs.map(g => { const net = g.sales - g.spent; return <b key={g.key} className={net >= 0 ? 'pos' : 'neg'} title={`${g.tip}: ${money(net)}`}>{shortRp(net)}</b>; })}</div>
+                </>);
+              })()}
             </div>
           )}
           <h2 className="mt">Keluar per kategori</h2>
